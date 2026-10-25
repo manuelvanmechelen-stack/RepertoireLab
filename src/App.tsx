@@ -931,6 +931,10 @@ function App() {
     try { return JSON.parse(localStorage.getItem('repertoirelab-missed-moves-v1') ?? '{}') as Record<string, number>; } catch { return {}; }
   });
   const [showOpeningIdeas, setShowOpeningIdeas] = useState(true);
+  const [trainingPly, setTrainingPly] = useState(0);
+  const [trainingInput, setTrainingInput] = useState('');
+  const [trainingFeedback, setTrainingFeedback] = useState('');
+  const [trainingComplete, setTrainingComplete] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -1592,6 +1596,24 @@ function App() {
     a.click();
     URL.revokeObjectURL(url);
   }
+  function submitTrainingMove() {
+    if (!review) return;
+    let expected: string[];
+    try { expected = newGame(review.moves).history(); } catch { setTrainingFeedback('Deze variant bevat zetten die niet goed kunnen worden ingelezen.'); return; }
+    if (trainingPly >= expected.length) { setTrainingComplete(true); return; }
+    const input = trainingInput.trim().replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
+    const answer = expected[trainingPly].replace(/[!?+#]+/g, '');
+    if (input === answer) {
+      const next = trainingPly + 1;
+      setTrainingPly(next); setTrainingInput('');
+      setTrainingFeedback('Correct: ' + expected[trainingPly] + (next === expected.length ? ' — einde van de variant.' : ''));
+      if (next === expected.length) setTrainingComplete(true);
+    } else {
+      setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
+      setTrainingFeedback('Niet goed. Probeer opnieuw; denk aan de ontwikkelingszet en de dreiging in deze stelling.');
+    }
+  }
+  function resetMoveTraining() { setTrainingPly(0); setTrainingInput(''); setTrainingFeedback(''); setTrainingComplete(false); }
   function trainResult(remembered: boolean) {
     if (!review) return;
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
@@ -2933,8 +2955,8 @@ function App() {
                         />
                       </div>
                     </div>
-                    <button className="secondary full-width" onClick={() => { setDueIds([]); setReviewIndex(0); setRevealed(false); }}>Train alleen wat nu aan de beurt is</button>
-                    <button className="secondary full-width" onClick={() => { setDueIds(lines.map(line => line.id)); setReviewIndex(0); setRevealed(false); }}>Train alle varianten</button>
+                    <button className="secondary full-width" onClick={() => { setDueIds([]); setReviewIndex(0); setRevealed(false); resetMoveTraining(); }}>Train alleen wat nu aan de beurt is</button>
+                    <button className="secondary full-width" onClick={() => { setDueIds(lines.map(line => line.id)); setReviewIndex(0); setRevealed(false); resetMoveTraining(); }}>Train alle varianten</button>
                   </div>
                 </div>
               ) : (
