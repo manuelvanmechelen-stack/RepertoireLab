@@ -1073,8 +1073,10 @@ function App() {
         if (!moves.length) return;
         const perspective = position.turn() === 'w' ? 'white' : 'black';
         const ranked = rankBookBuilderCandidates(moves, perspective, minGames);
+        // Keep only statistically meaningful candidates. Tiny samples can
+        // look excellent by chance and should not create learned repertoire lines.
         const eligible = ranked
-          .filter(move => move.games > 0)
+          .filter(move => move.games >= minGames && move.recommended)
           .slice(0, maxChildren);
         if (!eligible.length) return;
         for (const candidate of eligible) {
