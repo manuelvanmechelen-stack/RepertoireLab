@@ -2359,6 +2359,27 @@ function App() {
                             <div><strong>{explorer.black.toLocaleString('nl-NL')}</strong><span>Zwart wint</span></div>
                           </div>
                           <div className="recommendation-caption">Zetadvies voor {game.turn() === 'w' ? 'wit' : 'zwart'} · 65% lokale Stockfish-evaluatie + 35% database-score wanneer beide beschikbaar zijn. Als de engine niet start, wordt de database-score gebruikt.</div>
+                          {(() => {
+                            const prefix = game.history();
+                            const knownNextMoves = new Set<string>();
+                            for (const line of repertoireLines) {
+                              try {
+                                const history = newGame(line.moves).history();
+                                if (history.length > prefix.length && prefix.every((san, index) => history[index] === san)) {
+                                  knownNextMoves.add(history[prefix.length]);
+                                }
+                              } catch { /* ignore invalid legacy line */ }
+                            }
+                            const missingMoves = recommendedMoves.filter(move => !knownNextMoves.has(move.san));
+                            return <div className="position-coverage">
+                              <div>
+                                <strong>Repertoiredekking op deze stelling</strong>
+                                <span>{knownNextMoves.size} van {recommendedMoves.length} databasezetten als vervolg opgeslagen</span>
+                              </div>
+                              <div className="position-coverage-track"><i style={{ width: (recommendedMoves.length ? Math.min(100, knownNextMoves.size / recommendedMoves.length * 100) : 0) + '%' }} /></div>
+                              <small>{missingMoves.length ? 'Nog niet opgenomen: ' + missingMoves.slice(0, 6).map(move => move.san).join(', ') + (missingMoves.length > 6 ? ' …' : '') : 'Alle getoonde databasezetten zijn al vertegenwoordigd in je repertoire.'}</small>
+                            </div>;
+                          })()}
                           <div className="explorer-moves">
                             {recommendedMoves.map((move, index) => {
                               const total = move.total;
