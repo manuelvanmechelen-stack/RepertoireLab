@@ -2123,7 +2123,7 @@ function App() {
                             const renderNodes = (nodes: TreeNode[]): React.ReactNode[] => nodes.map(node => {
                               const owners = repertoireLines.filter(line => node.lineIds.includes(line.id));
                               const owner = owners.find(line => line.id === active) ?? owners[0];
-                              return <div className="move-tree-line" key={node.ply + '-' + node.san}>
+                              return <div className={'move-tree-line' + (game.history().length === node.ply && game.history().join(' ') === newGame(owner?.moves).history().slice(0, node.ply).join(' ') ? ' current' : '')} key={node.ply + '-' + node.san}>
                                 <div className="move-tree-moves">
                                   <button className="tree-move" title={owners.map(line => line.name).join(', ')} onClick={() => {
                                     if (!owner) return;
@@ -2220,6 +2220,14 @@ function App() {
                         Zet terug
                       </button>
                     </div>
+                    <div className="builder-position-status">
+                      <div>
+                        <span className="eyebrow">HUIDIGE BOUWSTELLING</span>
+                        <strong>{game.history().length ? game.history().length + (game.history().length === 1 ? ' halve zet gespeeld' : ' halve zetten gespeeld') : 'Beginstelling'}</strong>
+                        <span>{game.turn() === 'w' ? 'Wit is aan zet' : 'Zwart is aan zet'}{activeRepertoire ? ' · ' + activeRepertoire.name : ' · Maak eerst een repertoire aan'}</span>
+                      </div>
+                      <button className="secondary" onClick={() => { setBranchName(''); setNotice(game.history().length ? 'Je kunt vanaf deze stelling een nieuwe vertakking spelen en opslaan.' : 'Speel een eerste zet op het bord en sla daarna de variant op.'); }} disabled={!activeRepertoire}>Vertakking vanaf deze stelling</button>
+                    </div>
                     <div className="move-strip">
                       <span>ZETTEN</span>
                       <div>
@@ -2242,7 +2250,7 @@ function App() {
                         <button className="secondary" onClick={() => {
                           const history = game.history();
                           if (!history.length) return;
-                          const copy = new Chess(game.fen());
+                          const copy = cloneGame(game);
                           copy.undo();
                           setGame(copy);
                           setSelected(null);
