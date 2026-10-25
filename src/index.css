@@ -1895,3 +1895,6 @@ textarea:focus-visible {
 .study-empty{font-size:12px;color:#9d9dad;line-height:1.6;padding:10px 0}
 .study-focus-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
 @media(max-width:560px){.study-focus-panel{padding:14px}.study-focus-heading{align-items:stretch;flex-direction:column}.study-accuracy{align-self:flex-start}.study-focus-metrics{gap:6px}.study-focus-metrics>div{padding:9px}.weak-line-row{flex-wrap:wrap}.weak-line-info{min-width:calc(100% - 60px)}.weak-line-status{margin-left:38px}.study-focus-actions{flex-direction:column}.study-focus-actions button{width:100%}}
+
+/* Tree management and adjustable local engine analysis */
+.analysis-depth-label{display:flex;align-items:center;gap:8px;color:#a7a5b7;font-size:11px}.analysis-depth-label select{min-width:120px;background:#191821;color:#e8e5f2;border:1px solid #403c4d;border-radius:8px;padding:9px}.danger{border:1px solid #6d343c;background:#2a191d;color:#ffb9c0;border-radius:8px;padding:9px 12px;cursor:pointer}.danger:hover{background:#3a2026}.repertoire-tree-panel .danger{margin-left:6px}
