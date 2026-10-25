@@ -1330,30 +1330,48 @@ function App() {
     setNotice('Variant verwijderd.');
   }
   function importPgn() {
-    const candidate = new Chess();
-    try {
-      if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan voordat je PGN importeert.'); return; }
-      candidate.loadPgn(pgnInput);
-      const line: Line = {
-        id: crypto.randomUUID(),
-        repertoireId: activeRepertoire.id,
-        name: 'Geïmporteerde partij',
-        color: activeRepertoire.color,
-        moves: pgnInput.trim(),
-        tags: ['PGN-import'],
-        note: 'Geïmporteerd via PGN.',
-        due: 0,
-        seen: 0,
-      };
-      setLines(prev => [line, ...prev]);
-      setActive(line.id);
-      setGame(candidate);
-      setShowPgn(false);
-      setPgnInput('');
-      setNotice('PGN geïmporteerd.');
-    } catch {
-      setNotice('Deze PGN kon niet worden ingelezen. Controleer de notatie.');
+    if (!activeRepertoire) {
+      setNotice('Maak eerst een repertoire aan voordat je PGN importeert.');
+      return;
     }
+    const chunks = pgnInput.trim().split(/(?=\[Event\s+")/).map(chunk => chunk.trim()).filter(Boolean);
+    if (!chunks.length) {
+      setNotice('Plak eerst een geldige PGN.');
+      return;
+    }
+    const imported: Line[] = [];
+    for (let index = 0; index < chunks.length; index++) {
+      const candidate = new Chess();
+      try {
+        candidate.loadPgn(chunks[index]);
+        if (!candidate.history().length) continue;
+        const eventName = chunks[index].match(/\[Event\s+"([^"]+)"/)?.[1];
+        imported.push({
+          id: crypto.randomUUID(),
+          repertoireId: activeRepertoire.id,
+          name: eventName && eventName !== '?' ? eventName : (chunks.length > 1 ? 'Geïmporteerde variant ' + (index + 1) : 'Geïmporteerde variant'),
+          color: activeRepertoire.color,
+          moves: candidate.pgn(),
+          tags: ['PGN-import'],
+          note: 'Geïmporteerd via PGN.',
+          due: 0,
+          seen: 0,
+        });
+      } catch {
+        setNotice('PGN-import gestopt: variant ' + (index + 1) + ' bevat ongeldige zetten.');
+        return;
+      }
+    }
+    if (!imported.length) {
+      setNotice('Geen geldige zetten gevonden in deze PGN.');
+      return;
+    }
+    setLines(previous => [...imported, ...previous]);
+    setActive(imported[0].id);
+    setGame(newGame(imported[0].moves));
+    setShowPgn(false);
+    setPgnInput('');
+    setNotice(imported.length + (imported.length === 1 ? ' variant geïmporteerd.' : ' varianten geïmporteerd.'));
   }
   function exportBackup() {
     const blob = new Blob([JSON.stringify({ version: 1, lines }, null, 2)], {
