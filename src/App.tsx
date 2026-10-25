@@ -820,6 +820,18 @@ function newGame(moves?: string) {
   }
   return game;
 }
+
+// Clone the complete move history, not just the current FEN. Loading only FEN
+// discards earlier moves and makes saved variants/undo contain only the last move.
+function cloneGame(source: Chess) {
+  const copy = new Chess();
+  const pgn = source.pgn();
+  if (pgn.trim()) {
+    try { copy.loadPgn(pgn); return copy; } catch { /* use FEN fallback */ }
+  }
+  copy.load(source.fen());
+  return copy;
+}
 function App() {
   const [lines, setLines] = useState<Line[]>(() => {
     try {
@@ -841,6 +853,7 @@ function App() {
   });
   const [activeRepertoireId, setActiveRepertoireId] = useState(() => localStorage.getItem('repertoirelab-active-repertoire-v1') ?? '');
   const [newRepertoireName, setNewRepertoireName] = useState('');
+  const [editingRepertoireName, setEditingRepertoireName] = useState('');
 
   const [tab, setTab] = useState<'overzicht' | 'repertoire' | 'trainen'>(
     'overzicht'
@@ -1150,6 +1163,46 @@ function App() {
     setSelected(null);
     setNewRepertoireName('');
     setNotice('Repertoire aangemaakt. Speel zetten op het bord om je eerste variant op te bouwen.');
+  }
+
+  function renameActiveRepertoire() {
+    if (!activeRepertoire) return;
+    const name = editingRepertoireName.trim();
+    if (!name) { setNotice('Geef het repertoire een naam.'); return; }
+    setRepertoires(previous => previous.map(item => item.id === activeRepertoire.id ? { ...item, name } : item));
+    setEditingRepertoireName('');
+    setNotice('Repertoire hernoemd.');
+  }
+  function deleteActiveRepertoire() {
+    if (!activeRepertoire) return;
+    const removedId = activeRepertoire.id;
+    setRepertoires(previous => previous.filter(item => item.id !== removedId));
+    setLines(previous => previous.filter(line => line.repertoireId !== removedId));
+    setActiveRepertoireId('');
+    setActive('');
+    setGame(newGame());
+    setSelected(null);
+    setNotice('Repertoire en bijbehorende varianten verwijderd.');
+  }
+  function exportActiveRepertoirePgn() {
+    if (!activeRepertoire || !repertoireLines.length) {
+      setNotice('Er zijn nog geen varianten om te exporteren.');
+      return;
+    }
+    const contents = repertoireLines.map((line, index) => {
+      const escaped = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\\r\\n]/g, ' ');
+      const game = newGame(line.moves);
+      const pgn = game.pgn({ maxWidth: 100 });
+      return '[Event "' + escaped(line.name) + '"]\\n[Site "RepertoireLab"]\\n[White "' + (line.color === 'Wit' ? 'Repertoire' : 'Opponent') + '"]\\n[Black "' + (line.color === 'Zwart' ? 'Repertoire' : 'Opponent') + '"]\\n[Round "' + (index + 1) + '"]\\n\\n' + pgn + (pgn.endsWith('*') ? '' : ' *');
+    }).join('\\n\\n');
+    const blob = new Blob([contents + '\\n'], { type: 'application/x-chess-pgn;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = activeRepertoire.name.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() + '.pgn';
+    link.click();
+    URL.revokeObjectURL(url);
+    setNotice('PGN geëxporteerd met ' + repertoireLines.length + ' varianten.');
   }
 
   function saveCurrentBranch() {
@@ -1481,7 +1534,7 @@ function App() {
       setExplorerError('De stelling is veranderd. Zoek de database opnieuw op.');
       return;
     }
-    const copy = new Chess(game.fen());
+    const copy = cloneGame(game);
     try {
       copy.move(san);
       setGame(copy);
@@ -1508,7 +1561,7 @@ function App() {
       setNotice('Voer eerst zetten in, bijvoorbeeld: Nf3 Nc6 d4.');
       return;
     }
-    const copy = new Chess(game.fen());
+    const copy = cloneGame(game);
     try {
       for (const token of tokens) {
         const uci = token.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
