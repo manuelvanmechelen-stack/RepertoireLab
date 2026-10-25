@@ -15,6 +15,6 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm install
+      - run: npm install --no-save @playwright/test
       - run: npx playwright install --with-deps chromium
-      - run: npm run dev -- --host 127.0.0.1 > /tmp/repertoirelab-vite.log 2>&1 &
-      - run: npx --yes --package @playwright/test playwright test
+      - run: npx playwright test
