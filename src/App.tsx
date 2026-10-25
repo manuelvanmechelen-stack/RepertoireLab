@@ -1757,9 +1757,13 @@ function App() {
     const currentBoard = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); const piece = currentBoard.get(square);
     if (!trainingSelected) { if (piece && piece.color === currentBoard.turn()) setTrainingSelected(square); return; }
     try {
-      const played = currentBoard.move({ from: trainingSelected, to: square, promotion: 'q' });
+      const expected = newGame(review.moves).history();
+      const expectedSan = expected[trainingPly] ?? '';
+      // Match underpromotions when the repertoire explicitly calls for one.
+      const promotion = expectedSan.match(/=([QRBN])/i)?.[1].toLowerCase() ?? 'q';
+      const played = currentBoard.move({ from: trainingSelected, to: square, promotion });
       if (!played) { setTrainingSelected(piece && piece.color === currentBoard.turn() ? square : null); return; }
-      const expected = newGame(review.moves).history(); const norm = (v: string) => v.replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
+      const norm = (v: string) => v.replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
       const key = review.id + ':' + trainingPly;
       if (norm(played.san) !== norm(expected[trainingPly] ?? '')) {
         setMoveMemory(prev => ({ ...prev, [key]: { seen: (prev[key]?.seen ?? 0) + 1, misses: (prev[key]?.misses ?? 0) + 1, due: Date.now() + 300000, intervalDays: 0, lastResult: 'miss' } }));
