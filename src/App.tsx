@@ -1001,6 +1001,7 @@ function App() {
   }
 
   async function autofillCurrentPosition() {
+    if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan voordat je het automatisch aanvult.'); return; }
     if (autofillLoading) return;
     setAutofillLoading(true);
     setNotice('');
@@ -1583,7 +1584,7 @@ function App() {
           onClick={() => setTab('repertoire')}
         >
           <BookOpen size={18} /> Mijn repertoire{' '}
-          <span className="nav-count">{lines.length}</span>
+          <span className="nav-count">{repertoires.length}</span>
         </button>
         <button
           className={tab === 'trainen' ? 'nav active' : 'nav'}
