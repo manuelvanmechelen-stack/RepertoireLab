@@ -989,15 +989,14 @@ function App() {
     setAutofillLoading(true);
     setNotice('');
     try {
-      const root = new Chess();
-      for (const san of game.history()) root.move(san);
-      const prefix = root.history();
+      const root = new Chess(game.fen());
+      const prefix = game.history();
       const source = explorerSource === 'masters' ? 'masters' : 'lichess';
-      const fetchMoves = async (position: Chess) => {
+      const fetchMoves = async (position: Chess): Promise<ExplorerMove[]> => {
         const url = new URL('https://explorer.lichess.ovh/' + source);
         url.searchParams.set('variant', 'standard');
         url.searchParams.set('fen', position.fen());
-        url.searchParams.set('moves', '5');
+        url.searchParams.set('moves', '8');
         url.searchParams.set('topGames', '0');
         url.searchParams.set('recentGames', '0');
         if (source === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
@@ -1005,46 +1004,61 @@ function App() {
         if (!response.ok) throw new Error('Lichess gaf fout ' + response.status + '.');
         return ((await response.json()) as ExplorerResult).moves ?? [];
       };
-      const firstMoves = await fetchMoves(root);
-      if (!firstMoves.length) throw new Error('Geen veelgespeelde zetten gevonden voor deze stelling.');
-      // BookBuilder-style move selection: rank by confidence-aware results and popularity,
-      // from the perspective of the side whose repertoire is being built.
-      const perspective = root.turn() === 'w' ? 'white' : 'black';
-      const rankedFirstMoves = rankBookBuilderCandidates(firstMoves, perspective)
-        .map(move => firstMoves.find(candidate => candidate.san === move.san)!)
-        .filter(Boolean);
+      // Generate a bounded, multi-ply opening tree rather than just one move and one reply.
+      const maxDepth = 10;
+      const maxBranches = 36;
+      const maxChildren = 3;
+      const minGames = 12;
       const additions: Line[] = [];
-      for (const first of rankedFirstMoves.slice(0, 5)) {
-        const afterFirst = new Chess(root.fen());
-        afterFirst.move(first.san);
-        let replies: ExplorerMove[] = [];
-        try { replies = await fetchMoves(afterFirst); } catch { /* keep the first-move branch */ }
-        const continuations = replies.length ? replies.slice(0, 2).map(move => move.san) : [''];
-        for (const reply of continuations) {
-          const branch = new Chess();
-          for (const san of prefix) branch.move(san);
-          branch.move(first.san);
-          if (reply) branch.move(reply);
-          const signature = branch.history().join(' ');
-          if (lines.some(line => newGame(line.moves).history().join(' ') === signature) ||
-              additions.some(line => newGame(line.moves).history().join(' ') === signature)) continue;
-          additions.push({
-            id: crypto.randomUUID(),
-            name: (current?.name ?? 'Variant') + ' — ' + first.san + (reply ? ' ' + reply : ''),
-            color: current?.color ?? 'Wit',
-            moves: branch.pgn(),
-            tags: [...(current?.tags ?? []), 'Automatisch aangevuld'],
-            note: 'Voorgesteld met BookBuilder-stijl rangschikking op basis van Lichess-partijresultaten, steekproefgrootte en populariteit. Zetlegaliteit is door chess.js gecontroleerd; beoordeel de variant en engine-evaluatie zelf.',
-            due: 0,
-            seen: 0,
-          });
+      const known = new Set(lines.map(line => {
+        try { return newGame(line.moves).history().join(' '); } catch { return ''; }
+      }));
+      const walk = async (position: Chess, path: string[], depth: number): Promise<void> => {
+        if (depth >= maxDepth || additions.length >= maxBranches) return;
+        let moves: ExplorerMove[];
+        try { moves = await fetchMoves(position); } catch { return; }
+        if (!moves.length) return;
+        const perspective = position.turn() === 'w' ? 'white' : 'black';
+        const ranked = rankBookBuilderCandidates(moves, perspective, minGames);
+        const eligible = ranked
+          .filter(move => move.games > 0)
+          .slice(0, maxChildren);
+        if (!eligible.length) return;
+        for (const candidate of eligible) {
+          if (additions.length >= maxBranches) break;
+          const next = new Chess(position.fen());
+          try { next.move(candidate.san); } catch { continue; }
+          const nextPath = [...path, candidate.san];
+          // Save each meaningful branch as a PGN line, so the existing repertoire tree
+          // can merge shared prefixes and show all generated continuations.
+          const fullPath = [...prefix, ...nextPath];
+          const signature = fullPath.join(' ');
+          if (fullPath.length > prefix.length && !known.has(signature)) {
+            const saved = new Chess();
+            try {
+              for (const san of fullPath) saved.move(san);
+            } catch { continue; }
+            additions.push({
+              id: crypto.randomUUID(),
+              name: (current?.name ?? 'Variant') + ' — ' + nextPath.join(' '),
+              color: current?.color ?? (prefix.length % 2 === 0 ? 'Wit' : 'Zwart'),
+              moves: saved.pgn(),
+              tags: [...(current?.tags ?? []), 'BookBuilder-stijl automatisch opgebouwd'],
+              note: 'Automatisch voorgestelde vertakking op basis van Lichess-partijdata. Rangschikking houdt rekening met resultaat, steekproefgrootte en populariteit. Controleer de volledige variant en engine-evaluatie voordat je deze leert.',
+              due: 0,
+              seen: 0,
+            });
+            known.add(signature);
+          }
+          await walk(next, nextPath, depth + 1);
         }
-      }
+      };
+      await walk(root, [], 0);
       if (!additions.length) {
-        setNotice('Geen nieuwe vertakkingen gevonden; deze reacties staan waarschijnlijk al in je repertoire.');
+        setNotice('Geen nieuwe vertakkingen gevonden. Probeer een andere stelling of databron.');
       } else {
         setLines(previous => [...previous, ...additions]);
-        setNotice(additions.length + ' vertakkingen toegevoegd. Controleer de varianten en engine-evaluaties voordat je ze uit je hoofd leert.');
+        setNotice(additions.length + ' meerlagige vertakkingen toegevoegd (maximaal ' + maxDepth + ' halve zetten en ' + maxBranches + ' nieuwe lijnen). Controleer de varianten en engine-evaluaties voordat je ze leert.');
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Automatisch aanvullen is mislukt.');
