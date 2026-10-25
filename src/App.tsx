@@ -2448,13 +2448,17 @@ function App() {
                               } catch { /* ignore invalid legacy line */ }
                             }
                             const missingMoves = recommendedMoves.filter(move => !knownNextMoves.has(move.san));
+                            const totalGames = recommendedMoves.reduce((sum, move) => sum + move.total, 0);
+                            const coveredGames = recommendedMoves.reduce((sum, move) => sum + (knownNextMoves.has(move.san) ? move.total : 0), 0);
+                            const weightedCoverage = totalGames ? coveredGames / totalGames * 100 : 0;
+                            const priorityMoves = [...missingMoves].sort((a, b) => b.total - a.total);
                             return <div className="position-coverage">
                               <div>
                                 <strong>Repertoiredekking op deze stelling</strong>
-                                <span>{knownNextMoves.size} van {recommendedMoves.length} databasezetten als vervolg opgeslagen</span>
+                                <span>{knownNextMoves.size} van {recommendedMoves.length} databasezetten · {Math.round(weightedCoverage)}% van de partijfrequentie afgedekt</span>
                               </div>
-                              <div className="position-coverage-track"><i style={{ width: (recommendedMoves.length ? Math.min(100, knownNextMoves.size / recommendedMoves.length * 100) : 0) + '%' }} /></div>
-                              <small>{missingMoves.length ? 'Nog niet opgenomen: ' + missingMoves.slice(0, 6).map(move => move.san).join(', ') + (missingMoves.length > 6 ? ' …' : '') : 'Alle getoonde databasezetten zijn al vertegenwoordigd in je repertoire.'}</small>
+                              <div className="position-coverage-track"><i style={{ width: Math.min(100, weightedCoverage) + '%' }} /></div>
+                              <small>{priorityMoves.length ? 'Prioriteit om toe te voegen: ' + priorityMoves.slice(0, 4).map(move => move.san + ' (' + Math.round(totalGames ? move.total / totalGames * 100 : 0) + '%)').join(', ') + (priorityMoves.length > 4 ? ' …' : '') : 'Alle getoonde databasezetten zijn al vertegenwoordigd in je repertoire.'}</small>
                             </div>;
                           })()}
                           {showModelGames && (explorer.topGames?.length ?? 0) > 0 && <section className="model-games">
