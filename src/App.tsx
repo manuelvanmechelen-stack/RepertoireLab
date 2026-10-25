@@ -1992,30 +1992,45 @@ function App() {
                         <button className="primary" onClick={saveCurrentBranch}>{repertoireLines.length ? 'Variant opslaan' : 'Eerste variant opslaan'}</button>
                         <button className="secondary" disabled={!repertoireLines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
-                      <details className="move-tree-details">
-                        <summary>Bekijk alle lijnen als zettenboom ({repertoireLines.length} varianten)</summary>
+                      <details className="move-tree-details" open>
+                        <summary>Gedeelde zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">
-                          {repertoireLines.map(line => {
-                            const history = newGame(line.moves).history();
-                            return (
-                              <div className={'move-tree-line ' + (line.id === active ? 'current' : '')} key={line.id}>
-                                <button className="move-tree-name" onClick={() => selectLine(line)}>{line.name}</button>
+                          {(() => {
+                            type TreeNode = { san: string; ply: number; children: TreeNode[]; lineIds: string[] };
+                            const root: TreeNode = { san: '', ply: 0, children: [], lineIds: [] };
+                            for (const line of repertoireLines) {
+                              let parent = root;
+                              const path = newGame(line.moves).history();
+                              path.forEach((san, index) => {
+                                let child = parent.children.find(node => node.san === san);
+                                if (!child) {
+                                  child = { san, ply: index + 1, children: [], lineIds: [] };
+                                  parent.children.push(child);
+                                }
+                                if (!child.lineIds.includes(line.id)) child.lineIds.push(line.id);
+                                parent = child;
+                              });
+                            }
+                            const renderNodes = (nodes: TreeNode[]): React.ReactNode[] => nodes.map(node => {
+                              const owners = repertoireLines.filter(line => node.lineIds.includes(line.id));
+                              const owner = owners.find(line => line.id === active) ?? owners[0];
+                              return <div className="move-tree-line" key={node.ply + '-' + node.san}>
                                 <div className="move-tree-moves">
-                                  {history.map((san, index) => (
-                                    <button
-                                      key={line.id + '-' + index}
-                                      className="tree-move"
-                                      title={'Ga naar zet ' + (Math.floor(index / 2) + 1)}
-                                      onClick={() => jumpToLineMove(line, index + 1)}
-                                    >
-                                      {index % 2 === 0 ? Math.floor(index / 2) + 1 + '. ' : ''}
-                                      {san}
-                                    </button>
-                                  ))}
+                                  <button className="tree-move" title={owners.map(line => line.name).join(', ')} onClick={() => {
+                                    if (!owner) return;
+                                    const candidate = newGame(owner.moves);
+                                    while (candidate.history().length > node.ply) candidate.undo();
+                                    setActive(owner.id); setGame(candidate); setSelected(null);
+                                  }}>
+                                    {node.ply % 2 ? Math.ceil(node.ply / 2) + '. ' : Math.floor(node.ply / 2) + '... '}{node.san}
+                                  </button>
+                                  <span className="muted">{owners.length > 1 ? 'gedeeld door ' + owners.length + ' varianten' : owner?.name}</span>
                                 </div>
-                              </div>
-                            );
-                          })}
+                                {node.children.length > 0 && <div style={{ marginLeft: 18, borderLeft: '1px solid #ddd', paddingLeft: 10 }}>{renderNodes(node.children)}</div>}
+                              </div>;
+                            });
+                            return renderNodes(root.children);
+                          })()}
                         </div>
                       </details>
                     </section>
