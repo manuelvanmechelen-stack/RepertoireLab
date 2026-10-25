@@ -1617,7 +1617,7 @@ function App() {
       setNotice('Maak eerst een repertoire aan voordat je PGN importeert.');
       return;
     }
-    const chunks = pgnInput.trim().split(/(?=\[Event\s+")/).map(chunk => chunk.trim()).filter(Boolean);
+    const chunks = splitPgnCollection(pgnInput);
     if (!chunks.length) {
       setNotice('Plak eerst een geldige PGN.');
       return;
