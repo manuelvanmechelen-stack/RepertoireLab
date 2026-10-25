@@ -193,9 +193,9 @@ equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen ver
 
 const gameOne = '[Event "Game one"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
 const gameTwo = '[Event "Game two"]\n[Site "Club"]\n\n1. d4 d5 0-1';
-const collection = splitPgnCollection(gameOne + '\n\n' + gameTwo);
-equal(collection.length, 2, 'PGN-verzameling wordt op Event-header gesplitst');
-check(collection[0].includes('Game one') && collection[1].includes('Game two'), 'splitsen behoudt partijvolgorde en headers');
+const splitCollection = splitPgnCollection(gameOne + '\n\n' + gameTwo);
+equal(splitCollection.length, 2, 'PGN-verzameling wordt op Event-header gesplitst');
+check(splitCollection[0].includes('Game one') && splitCollection[1].includes('Game two'), 'splitsen behoudt partijvolgorde en headers');
 equal(splitPgnCollection('   ').length, 0, 'lege PGN levert geen partijen op');
 equal(splitPgnCollection('1. e4 e5').length, 1, 'PGN zonder Event-header blijft één invoer');
 equal(splitPgnCollection(gameOne).length, 1, 'één PGN-partij blijft één invoer');
