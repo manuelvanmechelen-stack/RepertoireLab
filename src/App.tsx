@@ -1046,7 +1046,7 @@ function App() {
     setCoverage({});
     const results: Record<string, { games: number; error?: string }> = {};
     try {
-      for (const line of repertoireLines {
+      for (const line of repertoireLines) {
         const position = newGame(line.moves);
         const fen = position.fen();
         try {
