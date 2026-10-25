@@ -1096,7 +1096,36 @@ function App() {
         for (let index = 0; index < history.length; index++) {
           const move = history[index];
           const isOurMove = line.color === 'Wit' ? index % 2 === 0 : index % 2 === 1;
-          if (isOurMove) {
+          if (!isOurMove) {
+            // Flag common opponent replies for which this repertoire has no saved continuation.
+            try {
+              const url = new URL('https://explorer.lichess.org/masters');
+              url.searchParams.set('variant', 'standard');
+              url.searchParams.set('fen', replay.fen());
+              url.searchParams.set('moves', '8');
+              url.searchParams.set('topGames', '0');
+              url.searchParams.set('recentGames', '0');
+              const response = await fetchExplorer(url);
+              if (response.ok) {
+                const data = await response.json() as ExplorerResult;
+                const total = (data.white || 0) + (data.draws || 0) + (data.black || 0);
+                const covered = new Set<string>();
+                for (const candidateLine of repertoireLines) {
+                  try {
+                    const candidateHistory = newGame(candidateLine.moves).history();
+                    const currentPrefix = history.slice(0, index).map(item => item.san);
+                    if (currentPrefix.every((san, i) => candidateHistory[i] === san) && candidateHistory.length > index) covered.add(candidateHistory[index]);
+                  } catch {}
+                }
+                for (const candidate of (data.moves ?? []).slice(0, 5)) {
+                  const games = candidate.white + candidate.draws + candidate.black;
+                  if (!covered.has(candidate.san) && games >= 20 && total > 0 && games / total >= 0.08) {
+                    findings.push({ lineId: line.id, lineName: line.name, ply: index + 1, san: candidate.san, severity: 'medium', message: 'Veelvoorkomende tegenzet ontbreekt als eigen vervolg in het repertoire (' + games + ' masterpartijen; ' + Math.round(games / total * 100) + '%). Voeg een antwoordvariant toe of markeer dit als bewust buiten je repertoire.', games });
+                  }
+                }
+              }
+            } catch { /* Continue the audit if the explorer is unavailable. */ }
+          } else {
             try {
               const url = new URL('https://explorer.lichess.org/masters');
               url.searchParams.set('variant', 'standard');
