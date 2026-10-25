@@ -2230,6 +2230,16 @@ function App() {
                   </div>)}
                 </section>}
                 {qualityAudit.length === 0 && !qualityLoading && false && <div />}
+                <section className="coverage-results">
+                  <button className="secondary full-width" onClick={() => setShowOpeningIdeas(value => !value)}>{showOpeningIdeas ? 'Verberg openingsideeën en fouten' : 'Toon openingsideeën en fouten'}</button>
+                  {showOpeningIdeas && <>
+                    <div className="coverage-summary"><strong>Openingsideeën en trainingsfouten</strong><br />Gebruik de notities om het plan te leren; fouten tellen op wanneer je een zet niet weet of een variant als moeilijk beoordeelt.</div>
+                    {repertoireLines.map(line => <div className="coverage-row" key={'ideas-' + line.id}>
+                      <div><strong>{line.name}</strong><span>{line.note || 'Voeg bij deze variant een strategisch plan toe.'}</span><span className="answer-moves">{line.moves}</span><span>{missedMoves[line.id] ?? 0} gemiste trainingszetten geregistreerd</span></div>
+                      <button className="text-button" onClick={() => { setActive(line.id); setGame(newGame(line.moves)); setTab('repertoire'); }}>Bestudeer</button>
+                    </div>)}
+                  </>}
+                </section>
                 {Object.keys(coverage).length > 0 && (<>
                   <div className="coverage-summary">
                     Repertoirediepte: {Math.round(Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length / Math.max(1, Object.keys(coverage).length) * 100)}% van de gecontroleerde lijnen zit onder je frequentiedoel. Dit meet dekking/diepte, niet de objectieve schaakkwaliteit.
