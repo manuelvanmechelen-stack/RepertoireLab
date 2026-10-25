@@ -902,6 +902,7 @@ function App() {
   const [explorerFen, setExplorerFen] = useState('');
   const [explorerSource, setExplorerSource] = useState<'masters' | 'lichess'>('lichess');
   const [ratingBand, setRatingBand] = useState('1800');
+  const [explorerToken, setExplorerToken] = useState(() => localStorage.getItem('repertoirelab-lichess-token-v1') ?? '');
   const [autofillLoading, setAutofillLoading] = useState(false);
   const [gameUsername, setGameUsername] = useState('');
   const [gameReviewLoading, setGameReviewLoading] = useState(false);
@@ -949,6 +950,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('repertoirelab-position-goal-v1', String(positionGoal));
   }, [positionGoal]);
+  useEffect(() => {
+    if (explorerToken.trim()) localStorage.setItem('repertoirelab-lichess-token-v1', explorerToken.trim());
+    else localStorage.removeItem('repertoirelab-lichess-token-v1');
+  }, [explorerToken]);
   // Keep the study board available even before the first user-created line exists.
   // The draft is UI state only; it is not saved as a pre-installed repertoire.
   const activeRepertoire = repertoires.find(item => item.id === activeRepertoireId) ?? null;
@@ -1009,6 +1014,23 @@ function App() {
     : [];
   const moveList = game.history();
 
+  function explorerRequestHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    const token = explorerToken.trim();
+    if (token) headers.Authorization = 'Bearer ' + token;
+    return headers;
+  }
+
+  function explorerHttpError(status: number): string {
+    if (status === 401 || status === 403) {
+      return explorerToken.trim()
+        ? 'Lichess weigert de API-token. Controleer of de token geldig is en opnieuw is gekopieerd.'
+        : 'Lichess vereist nu een gratis API-token. Voeg die toe bij de instellingen voor de openingsdatabase.';
+    }
+    if (status === 429) return 'Lichess beperkt tijdelijk het aantal verzoeken. Wacht ongeveer een minuut en probeer opnieuw.';
+    return 'Lichess gaf een foutmelding (' + status + '). Probeer het later opnieuw.';
+  }
+
   async function checkRepertoireCoverage() {
     if (coverageLoading) return;
     setCoverageLoading(true);
@@ -1019,14 +1041,14 @@ function App() {
         const position = newGame(line.moves);
         const fen = position.fen();
         try {
-          const url = new URL('https://explorer.lichess.ovh/masters');
+          const url = new URL('https://explorer.lichess.org/masters');
           url.searchParams.set('variant', 'standard');
           url.searchParams.set('fen', fen);
           url.searchParams.set('moves', '1');
           url.searchParams.set('topGames', '0');
           url.searchParams.set('recentGames', '0');
-          const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
-          if (!response.ok) throw new Error(response.status === 429 ? 'Lichess beperkt tijdelijk het aantal verzoeken; probeer later opnieuw.' : `Databasefout (${response.status})`);
+          const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
+          if (!response.ok) throw new Error(explorerHttpError(response.status));
           const data = await response.json() as ExplorerResult;
           results[line.id] = { games: (data.white || 0) + (data.draws || 0) + (data.black || 0) };
         } catch (error) {
@@ -1056,13 +1078,13 @@ function App() {
           const isOurMove = line.color === 'Wit' ? index % 2 === 0 : index % 2 === 1;
           if (isOurMove) {
             try {
-              const url = new URL('https://explorer.lichess.ovh/masters');
+              const url = new URL('https://explorer.lichess.org/masters');
               url.searchParams.set('variant', 'standard');
               url.searchParams.set('fen', replay.fen());
               url.searchParams.set('moves', '12');
               url.searchParams.set('topGames', '0');
               url.searchParams.set('recentGames', '0');
-              const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+              const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
               if (response.ok) {
                 const data = await response.json() as ExplorerResult;
                 const total = (data.white || 0) + (data.draws || 0) + (data.black || 0);
@@ -1098,15 +1120,15 @@ function App() {
       const prefix = game.history();
       const source = explorerSource === 'masters' ? 'masters' : 'lichess';
       const fetchMoves = async (position: Chess): Promise<ExplorerMove[]> => {
-        const url = new URL('https://explorer.lichess.ovh/' + source);
+        const url = new URL('https://explorer.lichess.org/' + source);
         url.searchParams.set('variant', 'standard');
         url.searchParams.set('fen', position.fen());
         url.searchParams.set('moves', '8');
         url.searchParams.set('topGames', '0');
         url.searchParams.set('recentGames', '0');
         if (source === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
-        const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error('Lichess gaf fout ' + response.status + '.');
+        const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
+        if (!response.ok) throw new Error(explorerHttpError(response.status));
         return ((await response.json()) as ExplorerResult).moves ?? [];
       };
       // Generate a bounded, multi-ply opening tree rather than just one move and one reply.
@@ -1597,18 +1619,16 @@ function App() {
     const requestedFen = game.fen();
     setExplorerFen(requestedFen);
     try {
-      const url = new URL(`https://explorer.lichess.ovh/${explorerSource}`);
+      const url = new URL(`https://explorer.lichess.org/${explorerSource}`);
       url.searchParams.set('variant', 'standard');
       url.searchParams.set('fen', requestedFen);
       url.searchParams.set('moves', '8');
       url.searchParams.set('topGames', '5');
       url.searchParams.set('recentGames', '0');
       if (explorerSource === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
-      const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+      const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
       if (!response.ok) {
-        if (response.status === 429) throw new Error('Lichess beperkt tijdelijk het aantal verzoeken. Wacht ongeveer een minuut en probeer opnieuw.');
-        if (response.status === 401 || response.status === 403) throw new Error('De Lichess-openingdatabase vereist momenteel mogelijk toegang via de API. Open de database via de link hieronder.');
-        throw new Error('Lichess gaf een foutmelding (' + response.status + '). Probeer het later opnieuw.');
+        throw new Error(explorerHttpError(response.status));
       }
       const data = (await response.json()) as ExplorerResult;
       setExplorer(data);
@@ -1701,18 +1721,16 @@ function App() {
     setExplorerFen(requestedFen);
     setEvalFen(requestedFen);
     try {
-      const explorerUrl = new URL(`https://explorer.lichess.ovh/${explorerSource}`);
+      const explorerUrl = new URL(`https://explorer.lichess.org/${explorerSource}`);
       explorerUrl.searchParams.set('variant', 'standard');
       explorerUrl.searchParams.set('fen', requestedFen);
       explorerUrl.searchParams.set('moves', '8');
       explorerUrl.searchParams.set('topGames', '5');
       explorerUrl.searchParams.set('recentGames', '0');
       if (explorerSource === 'lichess' && ratingBand !== 'all') explorerUrl.searchParams.set('ratings', ratingBand);
-      const explorerResponse = await fetch(explorerUrl.toString(), { headers: { Accept: 'application/json' } });
+      const explorerResponse = await fetch(explorerUrl.toString(), { headers: explorerRequestHeaders() });
       if (!explorerResponse.ok) {
-        throw new Error(explorerResponse.status === 429
-          ? 'Lichess beperkt tijdelijk het aantal verzoeken. Wacht ongeveer een minuut en probeer opnieuw.'
-          : `De openingsdatabase gaf een foutmelding (${explorerResponse.status}).`);
+        throw new Error(explorerHttpError(explorerResponse.status));
       }
       const openingData = await explorerResponse.json() as ExplorerResult;
       setExplorer(openingData);
@@ -2100,6 +2118,14 @@ function App() {
                   </div>
                 </div>
                 <div className="coverage-settings">
+                  <div>
+                    <label>
+                      Lichess API-token (gratis)
+                      <input type="password" autoComplete="off" value={explorerToken} onChange={event => setExplorerToken(event.target.value)} placeholder="Plak hier je persoonlijke API-token" aria-label="Lichess API-token" />
+                    </label>
+                    <p>De openingsdatabase vereist een token. Deze wordt alleen op dit apparaat opgeslagen en rechtstreeks naar Lichess gestuurd; voeg hem niet toe aan gedeelde code.</p>
+                    <a href="https://lichess.org/account/oauth/token" target="_blank" rel="noreferrer">Maak een gratis token aan</a>
+                  </div>
                   <div>
                     <label>
                       Ratingniveau voor zetstatistieken
