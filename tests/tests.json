@@ -1,0 +1,126 @@
+[
+  {
+    "name": "Automatically install expanded theory without losing existing lines",
+    "sanity": true,
+    "viewport": "desktop",
+    "covers": [
+      "automatic theory migration",
+      "Italian Giuoco Piano, Pianissimo, Two Knights and Evans gambit",
+      "Spanish Morphy, Berlin, Exchange and Marshall variations",
+      "Scotch main and gambit lines",
+      "Sicilian Scheveningen, Classical, Sveshnikov and Taimanov",
+      "Scandinavian Qa5, Qd6 and modern lines",
+      "Modern and Czech Benoni systems",
+      "Petroff main and 3.d4 lines",
+      "preserve custom repertoire lines"
+    ],
+    "description": "Verifies the expanded theory pack is added once to existing repertoires and preserves user-created lines.",
+    "steps": [
+      "Open RepertoireLab with the previous repertoire already saved",
+      "Wait for the expanded theory to appear",
+      "Search for Italian Giuoco Piano, Spanish Berlin, Scotch gambit, Sicilian Scheveningen, Scandinavian Qa5, Benoni and Petroff",
+      "Refresh the page"
+    ],
+    "expected": "The new opening branches are present after migration, survive refresh without duplication, and existing custom lines remain."
+  },
+  {
+    "name": "Explore a position and follow candidate opening moves",
+    "viewport": "desktop",
+    "covers": [
+      "Lichess opening explorer",
+      "candidate move statistics",
+      "rank moves by side-to-move win/draw statistics",
+      "combine database score with live local Stockfish WebAssembly analysis",
+      "run local Stockfish independently of cached cloud evaluations",
+      "fallback to database score when local engine cannot start",
+      "opening branch study",
+      "move-tree navigation",
+      "save a new branch from the current board",
+      "update an existing line from the current board"
+    ],
+    "description": "Verifies the board-driven repertoire tree supports jumping to a move, saving a new branch, and updating the selected line.",
+    "steps": [
+      "Open Mijn repertoire and expand the repertoire tree",
+      "Click a move inside a saved line to load that position",
+      "Click Aanbevelingen op winrate + engine",
+      "Inspect move win/draw statistics and available engine scores",
+      "Choose a suggested move and play it on the board",
+      "Enter a branch name and click Vertakking opslaan",
+      "Inspect the repertoire list and refresh the page"
+    ],
+    "expected": "The new branch appears as a saved repertoire line and remains after refresh; the move suggestions are ranked using the side-to-move database score and a fresh local Stockfish 19 Lite WebAssembly analysis, with a database-only fallback if the local engine fails."
+  },
+  {
+    "name": "Check repertoire depth against the master database",
+    "viewport": "desktop",
+    "covers": [
+      "position-depth goal",
+      "master database query",
+      "visible coverage result or error"
+    ],
+    "description": "Verifies users can set a target for final-position frequency and check stored lines against the Lichess master database.",
+    "steps": [
+      "Open Mijn repertoire",
+      "Set a maximum master-game target",
+      "Click Controleer openingsdiepte",
+      "Inspect status for checked lines"
+    ],
+    "expected": "Each checked line shows whether its final position is below the target, needs extension, or could not be checked."
+  },
+  {
+    "name": "Study the expanded repertoire on mobile",
+    "viewport": "mobile",
+    "covers": [
+      "mobile repertoire browsing",
+      "interactive chessboard",
+      "strategic notes",
+      "search and filtering"
+    ],
+    "description": "Verifies expanded theory remains searchable and usable on a narrow screen.",
+    "steps": [
+      "Open Mijn repertoire on mobile",
+      "Search for Najdorf",
+      "Open a matching line",
+      "Inspect the board, moves, and strategic notes"
+    ],
+    "expected": "Search finds the prepared lines and a selected line can be studied on the interactive board with its notes."
+  },
+  {
+    "name": "Reject invalid custom opening notation",
+    "viewport": "desktop",
+    "covers": [
+      "custom repertoire creation",
+      "PGN validation",
+      "visible invalid-input feedback"
+    ],
+    "description": "Verifies invalid notation is rejected without adding a broken opening line.",
+    "steps": [
+      "Choose Nieuwe variant",
+      "Enter a name and invalid PGN such as 1. e4 Zz9",
+      "Submit the form",
+      "Inspect the repertoire list"
+    ],
+    "expected": "A visible notation error appears and the invalid line is not added."
+  },
+  {
+    "name": "Autofill repertoire and inspect Lichess games",
+    "viewport": "desktop",
+    "covers": [
+      "rating-level opening statistics",
+      "automatic repertoire branch creation",
+      "persistent generated repertoire lines",
+      "Lichess public game review",
+      "repertoire depth and coverage summary"
+    ],
+    "description": "Verifies users can select a rating group, add popular continuations from the current position, and review recent public games against saved repertoire lines.",
+    "steps": [
+      "Open Mijn repertoire and select the rating group around 1800",
+      "Load a position with known opening moves on the board",
+      "Click Vul repertoire automatisch aan vanuit deze stelling",
+      "Verify suggested branches appear in the repertoire list",
+      "Enter a valid public Lichess username and click Controleer partijen",
+      "Inspect the game-by-game repertoire match report"
+    ],
+    "expected": "New branches are saved without duplicating existing lines, and the game review displays a match or deviation summary for available public games."
+  }
+]
