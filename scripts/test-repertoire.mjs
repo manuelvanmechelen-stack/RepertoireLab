@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
+import { scheduleMoveResult, scheduleLineResult, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
+import { splitPgnCollection } from '../src/study/pgn.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -154,5 +156,47 @@ equal(empty.turn(), 'w', 'beginstelling begint met wit');
 check(new Chess().moves().includes('e4'), 'beginstelling biedt e4 aan');
 check(!new Chess().moves().includes('e5'), 'beginstelling biedt geen zwarte zet aan wit');
 equal(new Chess().fen(), 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'begin-FEN moet exact kloppen');
+
+// 10. Test the exact scheduling and PGN-splitting modules imported by the application.
+const fixedNow = 1_800_000_000_000;
+const firstGood = scheduleMoveResult(undefined, true, fixedNow);
+equal(firstGood.seen, 1, 'eerste correcte zet telt als gezien');
+equal(firstGood.misses, 0, 'eerste correcte zet heeft geen fout');
+equal(firstGood.intervalDays, 1, 'eerste correcte zet komt na een dag terug');
+equal(firstGood.due, fixedNow + 86_400_000, 'eerste correcte zet krijgt correcte vervaldatum');
+const repeatedGood = scheduleMoveResult({ seen: 4, misses: 2, due: 0, intervalDays: 5, lastResult: 'miss' }, true, fixedNow);
+equal(repeatedGood.intervalDays, 9, 'goede zet vergroot interval met factor 1,8 en afronding');
+equal(repeatedGood.misses, 2, 'goede zet wist historische fouten niet');
+const miss = scheduleMoveResult(firstGood, false, fixedNow);
+equal(miss.seen, 2, 'foute zet telt als poging');
+equal(miss.misses, 1, 'foute zet verhoogt foutenteller');
+equal(miss.intervalDays, 0, 'foute zet reset interval');
+equal(miss.due, fixedNow + 300_000, 'foute zet komt na vijf minuten terug');
+equal(miss.lastResult, 'miss', 'foute zet wordt als fout gemarkeerd');
+const firstLine = scheduleLineResult({ seen: 0, intervalDays: 0 }, true, 0, fixedNow);
+equal(firstLine.intervalDays, 1, 'eerste bekende variant krijgt een dag');
+const secondLine = scheduleLineResult({ seen: 1, intervalDays: 1 }, true, 0, fixedNow);
+equal(secondLine.intervalDays, 2, 'tweede bekende variant verdubbelt interval');
+const shakyLine = scheduleLineResult({ seen: 8, intervalDays: 21 }, true, 1, fixedNow);
+equal(shakyLine.intervalDays, 1, 'recente individuele fouten verkorten variantinterval');
+const forgottenLine = scheduleLineResult({ seen: 3, intervalDays: 5 }, false, 0, fixedNow);
+equal(forgottenLine.due, fixedNow + 300_000, 'niet onthouden variant komt na vijf minuten terug');
+check(isDue(undefined, fixedNow), 'ontbrekende vervaldatum wordt als direct verschuldigd behandeld');
+check(isDue(0, fixedNow), 'nulvervaldatum wordt als direct verschuldigd behandeld');
+check(isDue(fixedNow - 1, fixedNow), 'verlopen datum is verschuldigd');
+check(!isDue(fixedNow + 1, fixedNow), 'toekomstige datum is niet verschuldigd');
+equal(selectDueOwnPly(6, 'Wit', { 'x:0': { due: fixedNow + 100 }, 'x:2': { due: fixedNow - 1 } }, 'x', fixedNow + 50, fixedNow), 2, 'wit herhaalt eerste eigen zet die verschuldigd is');
+equal(selectDueOwnPly(6, 'Zwart', { 'x:1': { due: fixedNow - 1 } }, 'x', fixedNow + 50, fixedNow), 1, 'zwart herhaalt eerste eigen zet die verschuldigd is');
+equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow - 1, fixedNow), 0, 'verlopen hele variant start vanaf begin');
+equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen vervallen zet valt terug op beginstelling');
+
+const gameOne = '[Event "Game one"]\\n\\n1. e4 e5 2. Nf3 Nc6 1-0';
+const gameTwo = '[Event "Game two"]\\n[Site "Club"]\\n\\n1. d4 d5 0-1';
+const collection = splitPgnCollection(gameOne + '\\n\\n' + gameTwo);
+equal(collection.length, 2, 'PGN-verzameling wordt op Event-header gesplitst');
+check(collection[0].includes('Game one') && collection[1].includes('Game two'), 'splitsen behoudt partijvolgorde en headers');
+equal(splitPgnCollection('   ').length, 0, 'lege PGN levert geen partijen op');
+equal(splitPgnCollection('1. e4 e5').length, 1, 'PGN zonder Event-header blijft één invoer');
+equal(splitPgnCollection(gameOne).length, 1, 'één PGN-partij blijft één invoer');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
