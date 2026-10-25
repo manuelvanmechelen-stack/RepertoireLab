@@ -1189,13 +1189,21 @@ function App() {
       setNotice('Er zijn nog geen varianten om te exporteren.');
       return;
     }
+    const escapeHeader = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
     const contents = repertoireLines.map((line, index) => {
-      const escaped = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\\r\\n]/g, ' ');
       const game = newGame(line.moves);
       const pgn = game.pgn({ maxWidth: 100 });
-      return '[Event "' + escaped(line.name) + '"]\\n[Site "RepertoireLab"]\\n[White "' + (line.color === 'Wit' ? 'Repertoire' : 'Opponent') + '"]\\n[Black "' + (line.color === 'Zwart' ? 'Repertoire' : 'Opponent') + '"]\\n[Round "' + (index + 1) + '"]\\n\\n' + pgn + (pgn.endsWith('*') ? '' : ' *');
-    }).join('\\n\\n');
-    const blob = new Blob([contents + '\\n'], { type: 'application/x-chess-pgn;charset=utf-8' });
+      return [
+        '[Event "' + escapeHeader(line.name) + '"]',
+        '[Site "RepertoireLab"]',
+        '[White "' + (line.color === 'Wit' ? 'Repertoire' : 'Opponent') + '"]',
+        '[Black "' + (line.color === 'Zwart' ? 'Repertoire' : 'Opponent') + '"]',
+        '[Round "' + (index + 1) + '"]',
+        '',
+        pgn || '*',
+      ].join('\n');
+    }).join('\n\n');
+    const blob = new Blob([contents + '\n'], { type: 'application/x-chess-pgn;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
