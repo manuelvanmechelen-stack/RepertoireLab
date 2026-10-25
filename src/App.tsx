@@ -886,7 +886,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem('repertoirelab-position-goal-v1', String(positionGoal));
   }, [positionGoal]);
-  const current = lines.find(line => line.id === active) ?? lines[0];
+  // Keep the study board available even before the first user-created line exists.
+  // The draft is UI state only; it is not saved as a pre-installed repertoire.
+  const current = lines.find(line => line.id === active) ?? lines[0] ?? {
+    id: '__draft__',
+    name: 'Nieuw repertoire',
+    color: newColor,
+    moves: '',
+    tags: [],
+    note: '',
+    due: 0,
+    seen: 0,
+  };
   const recommendedMoves = useMemo(() => {
     if (!explorer?.moves?.length || explorerFen !== game.fen()) return [];
     const whiteToMove = game.turn() === 'w';
@@ -1887,12 +1898,7 @@ function App() {
                   ))}
                   {filtered.length === 0 && (
                     <div className="empty-state">
-                      Je repertoire is nog leeg. Maak zelf de eerste variant of importeer je eigen PGN. Er worden geen openingslijnen automatisch vooraf ingevuld.
-                      <div style={{ marginTop: 12 }}>
-                        <button className="primary" onClick={() => { setNewMoves(''); setNewName(''); setShowAdd(true); }}>
-                          <Plus size={16} /> Eerste variant maken
-                        </button>
-                      </div>
+                      Je repertoire is nog leeg. Speel zetten op het studie bord hieronder en sla je eerste variant op. Je kunt ook een PGN importeren. Er worden geen openingslijnen vooraf ingevuld.
                     </div>
                   )}
                 </div>
@@ -1914,17 +1920,17 @@ function App() {
                         <div>
                           <div className="eyebrow">REPERTOIREBOOM</div>
                           <h3>Bouw je varianten vanuit het bord</h3>
-                          <p>Kies een zet uit een bestaande lijn om naar die stelling te springen. Speel daarna een nieuwe zet op het bord of kies een zet uit de openingsexplorer en sla de vertakking op.</p>
+                          <p>Begin vanuit de startstelling en speel de zetten zelf op het bord. Sla een reeks zetten op als variant; ga daarna terug naar een eerdere stelling om een andere vertakking te maken. Databasezetten zijn alleen suggesties en worden pas toegevoegd als jij ze kiest.</p>
                         </div>
                       </div>
                       <div className="branch-save-row">
                         <input
-                          aria-label="Naam van nieuwe vertakking"
+                          aria-label="Naam van nieuwe variant of vertakking"
                           value={branchName}
                           onChange={event => setBranchName(event.target.value)}
-                          placeholder="Naam nieuwe vertakking, bijv. 6...e6"
+                          placeholder={lines.length ? "Naam nieuwe variant, bijv. Schots — 4...Nf6" : "Naam van je eerste variant"}
                         />
-                        <button className="primary" onClick={saveCurrentBranch}>Vertakking opslaan</button>
+                        <button className="primary" onClick={saveCurrentBranch}>{lines.length ? 'Variant / vertakking opslaan' : 'Eerste variant opslaan'}</button>
                         <button className="secondary" onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
                       <details className="move-tree-details">
@@ -2205,7 +2211,7 @@ function App() {
                     <div className="modal-heading">
                       <div>
                         <h2>Variant bouwen</h2>
-                        <p>Speel de zetten eerst op het schaakbord en gebruik de openingsdatabase om antwoorden te kiezen. Sla daarna de lijn hier op.</p>
+                        <p>Voor een nieuwe variant kun je het bord direct hieronder gebruiken. Geef je lijn een naam en sla de zetten op; je hoeft geen bestaande opening te installeren.</p>
                       </div>
                       <button
                         type="button"
