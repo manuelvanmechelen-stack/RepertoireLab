@@ -1203,8 +1203,11 @@ function App() {
     else setSelected(null);
   }
   function resetBoard() {
-    setGame(newGame(current?.moves));
+    // "Beginstelling" must actually return to move zero, so the user can build a fresh branch.
+    setGame(newGame());
+    setActive('');
     setSelected(null);
+    setNotice('Beginstelling geladen. Speel je zetten en sla ze op als nieuwe variant.');
   }
   function saveLine() {
     if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan voordat je een variant opslaat.'); return; }
@@ -1805,7 +1808,7 @@ function App() {
                       {repertoires.map(item => <option key={item.id} value={item.id}>{item.name} ({item.color})</option>)}
                     </select>
                     <span>{activeRepertoire ? repertoireLines.length + ' varianten in ' + activeRepertoire.name : 'Maak of selecteer eerst een repertoire.'}</span>
-                    {activeRepertoire && <button className="primary" onClick={() => { setNewName(''); setNewMoves(''); setNewColor(activeRepertoire.color); setShowAdd(true); }}><Plus size={16} /> Variant toevoegen</button>}
+                    {activeRepertoire && <button className="primary" onClick={() => { setGame(newGame()); setActive(''); setBranchName(''); setSelected(null); setNewColor(activeRepertoire.color); setNotice('Nieuwe variant: speel de zetten op het bord en sla ze hierboven op.'); }}><Plus size={16} /> Variant toevoegen</button>}
                   </div>
                 </div>
               </section>
