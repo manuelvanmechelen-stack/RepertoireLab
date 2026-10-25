@@ -2810,7 +2810,7 @@ function App() {
                           {evalLoading ? 'Analyseren…' : 'Analyseer stelling'}
                         </button>
                       </div>
-                      <p className="explorer-description">Draait Stockfish 19 Lite lokaal in je browser via WebAssembly. De engine analyseert deze stelling zelf tot diepte 14; een cloud-evaluatie is niet nodig.</p>
+                      <p className="explorer-description">Draait Stockfish 19 Lite lokaal in je browser via WebAssembly. De standaarddiepte is 16; hogere dieptes zijn beschikbaar in de zettraining.</p>
                       {evalError && <div className="explorer-message" role="status">{evalError}</div>}
                       {evalResult && evalFen === game.fen() && (
                         <>
