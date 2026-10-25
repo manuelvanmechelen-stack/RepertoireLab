@@ -927,6 +927,10 @@ function App() {
   const [qualityAuditDone, setQualityAuditDone] = useState(false);
   const [showTranspositions, setShowTranspositions] = useState(false);
   const [showModelGames, setShowModelGames] = useState(true);
+  const [missedMoves, setMissedMoves] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('repertoirelab-missed-moves-v1') ?? '{}') as Record<string, number>; } catch { return {}; }
+  });
+  const [showOpeningIdeas, setShowOpeningIdeas] = useState(true);
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -950,6 +954,9 @@ function App() {
   useEffect(() => {
     localStorage.setItem('repertoirelab-position-goal-v1', String(positionGoal));
   }, [positionGoal]);
+  useEffect(() => {
+    localStorage.setItem('repertoirelab-missed-moves-v1', JSON.stringify(missedMoves));
+  }, [missedMoves]);
   useEffect(() => {
     if (explorerToken.trim()) localStorage.setItem('repertoirelab-lichess-token-v1', explorerToken.trim());
     else localStorage.removeItem('repertoirelab-lichess-token-v1');
