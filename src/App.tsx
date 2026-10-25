@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleMoveResult, scheduleLineResult, selectDueOwnPly } from './study/scheduling.mjs';
+import { splitPgnCollection } from './study/pgn.mjs';
 import {
   BarChart3,
   BookOpen,
@@ -850,14 +851,6 @@ function analyzeTranspositions(lines: Line[]) {
     .map(([fen, item]) => ({ fen, paths: item.histories.size, names: [...item.names], ply: item.ply }))
     .sort((a, b) => b.names.length - a.names.length || a.ply - b.ply).slice(0, 20);
 }
-function splitPgnCollection(input: string): string[] {
-  const trimmed = input.trim();
-  if (!trimmed) return [];
-  // A PGN collection conventionally starts each game with an Event header.
-  const chunks = trimmed.split(/(?=^\\s*\\[Event\\s+")/m).map(chunk => chunk.trim()).filter(Boolean);
-  return chunks.length ? chunks : [trimmed];
-}
-
 function parseStrictPgn(pgn: string): Chess {
   const game = new Chess();
   game.loadPgn(pgn);
