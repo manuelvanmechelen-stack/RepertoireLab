@@ -2170,8 +2170,8 @@ function App() {
                   >
                     <div className="modal-heading">
                       <div>
-                        <h2>Nieuwe variant</h2>
-                        <p>Voeg een opening of een specifieke lijn toe.</p>
+                        <h2>Variant bouwen</h2>
+                        <p>Speel de zetten eerst op het schaakbord en gebruik de openingsdatabase om antwoorden te kiezen. Sla daarna de lijn hier op.</p>
                       </div>
                       <button
                         type="button"
@@ -2202,12 +2202,35 @@ function App() {
                         <option>Zwart</option>
                       </select>
                     </label>
+                    <div className="builder-import-panel">
+                      <div className="builder-import-heading">
+                        <strong>Zetten vanaf het bord overnemen</strong>
+                        <span>De huidige stelling en gespeelde zetten worden als variant opgeslagen.</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          const pgn = game.pgn();
+                          if (!game.history().length) {
+                            setNotice('Speel eerst zetten op het bord of voer hieronder een variant in.');
+                            return;
+                          }
+                          setNewMoves(pgn);
+                          if (!newName.trim()) setNewName('Eigen variant — ' + game.history().slice(0, 6).join(' '));
+                          setNotice('Zetten van het bord overgenomen. Controleer de naam en sla de variant op.');
+                        }}
+                      >
+                        <Plus size={16} /> Huidige bordlijn overnemen
+                      </button>
+                    </div>
                     <label>
                       PGN / zetten
-                      <input
+                      <textarea
+                        rows={3}
                         value={newMoves}
                         onChange={e => setNewMoves(e.target.value)}
-                        placeholder="1. e4 e5 2. Nf3 Nc6"
+                        placeholder="Speel zetten op het bord of plak PGN, bijvoorbeeld: 1. e4 c5 2. Nf3 d6"
                       />
                     </label>
                     <label>
