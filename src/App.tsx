@@ -939,6 +939,9 @@ function App() {
   const [trainingSelected, setTrainingSelected] = useState<Square | null>(null);
   const [trainingBoardFlip, setTrainingBoardFlip] = useState(false);
   const [moveMemory, setMoveMemory] = useState<Record<string, { seen: number; misses: number; due: number; intervalDays: number; lastResult?: 'good' | 'miss' }>>(() => { try { return JSON.parse(localStorage.getItem('repertoirelab-move-memory-v1') ?? '{}'); } catch { return {}; } });
+  const [trainingEval, setTrainingEval] = useState<CloudEval | null>(null);
+  const [trainingEvalLoading, setTrainingEvalLoading] = useState(false);
+  const [trainingEvalError, setTrainingEvalError] = useState('');
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -1018,9 +1021,10 @@ function App() {
     [repertoireLines, query, colorFilter]
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
-  const dueCount = lines.filter(line => !line.due || line.due <= Date.now()).length;
+  const dueMoveLineIds = new Set(Object.entries(moveMemory).filter(([, item]) => item.due <= Date.now()).map(([key]) => key.slice(0, key.lastIndexOf(':'))));
+  const dueCount = lines.filter(line => !line.due || line.due <= Date.now() || dueMoveLineIds.has(line.id)).length;
   const transpositions = useMemo(() => analyzeTranspositions(repertoireLines), [repertoireLines]);
-  const reviewLines = lines.filter(line => dueIds.length ? dueIds.includes(line.id) : (!line.due || line.due <= Date.now()));
+  const reviewLines = lines.filter(line => dueIds.length ? dueIds.includes(line.id) : ((!line.due || line.due <= Date.now()) || dueMoveLineIds.has(line.id)));
   const review = reviewLines.length
     ? reviewLines[reviewIndex % reviewLines.length]
     : null;
@@ -1661,10 +1665,25 @@ function App() {
   function isOwnTrainingPly(ply: number, color: 'Wit' | 'Zwart') { return color === 'Wit' ? ply % 2 === 0 : ply % 2 === 1; }
   function prepareBoardTraining(line: Line | null = review) {
     if (!line) return;
-    try { const source = newGame(line.moves); const san = source.history(); const replay = new Chess(); let ply = 0;
+    try {
+      const san = newGame(line.moves).history(); const replay = new Chess(); let ply = 0;
+      const lineIsDue = !line.due || line.due <= Date.now();
+      // When a line is not due but one of its moves is, start at the earliest due repertoire move.
+      const duePly = lineIsDue ? 0 : san.findIndex((_, index) => isOwnTrainingPly(index, line.color) && (moveMemory[line.id + ':' + index]?.due ?? Infinity) <= Date.now());
+      const startAt = duePly >= 0 ? duePly : 0;
+      while (ply < startAt) { replay.move(san[ply]); ply++; }
       while (ply < san.length && !isOwnTrainingPly(ply, line.color)) { replay.move(san[ply]); ply++; }
-      setTrainingPly(ply); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingInput(''); setTrainingFeedback(ply >= san.length ? 'Geen eigen zetten meer in deze variant.' : 'Speel je volgende repertoirezet op het bord.'); setTrainingComplete(ply >= san.length);
+      setTrainingPly(ply); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingInput(''); setTrainingEval(null); setTrainingEvalError('');
+      setTrainingFeedback(ply >= san.length ? 'Geen eigen zetten meer in deze variant.' : (startAt > 0 ? 'Herhaling vanaf een individuele zet die aan de beurt is.' : 'Speel je volgende repertoirezet op het bord.'));
+      setTrainingComplete(ply >= san.length);
     } catch { setTrainingFeedback('Deze variant bevat ongeldige zetten.'); }
+  }
+  async function analyzeTrainingPosition() {
+    if (trainingEvalLoading) return;
+    setTrainingEvalLoading(true); setTrainingEvalError(''); setTrainingEval(null);
+    try { const result = await runLocalStockfish(trainingBoardFen === 'start' ? new Chess().fen() : trainingBoardFen); setTrainingEval(result); }
+    catch (error) { setTrainingEvalError(error instanceof Error ? error.message : 'Analyse mislukt.'); }
+    finally { setTrainingEvalLoading(false); }
   }
   function handleTrainingSquare(square: Square) {
     if (!review || trainingComplete) return;
@@ -1692,8 +1711,9 @@ function App() {
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
     const nextSeen = review.seen + 1;
     const previousInterval = review.intervalDays ?? 0;
+    const recentMoveMisses = Object.entries(moveMemory).filter(([key, item]) => key.startsWith(review.id + ':') && item.lastResult === 'miss' && item.due > Date.now() - 7 * 86400000).length;
     const intervalDays = remembered
-      ? Math.min(120, Math.max(1, previousInterval ? Math.round(previousInterval * (nextSeen <= 2 ? 2 : 1.8)) : nextSeen <= 1 ? 1 : 3))
+      ? Math.min(120, Math.max(1, recentMoveMisses ? 1 : previousInterval ? Math.round(previousInterval * (nextSeen <= 2 ? 2 : 1.8)) : nextSeen <= 1 ? 1 : 3))
       : 0;
     const nextDue = remembered ? Date.now() + intervalDays * 86400000 : Date.now() + 5 * 60000;
     setLines(prev => prev.map(line => line.id === review.id ? {
@@ -2971,7 +2991,7 @@ function App() {
                       Probeer de zettenreeks hardop of op een bord na te spelen. Noteer voor jezelf ook het plan en de belangrijkste reactie van je tegenstander.
                     </p>
                     <div className="coverage-summary"><strong>Herinneringsdoel</strong><br />Noem de openingszetten in volgorde, leg één strategisch idee uit en bedenk welke tegenzet je repertoire het meest test.</div>
-                    <section className="move-entry-panel board-training-panel"><div className="eyebrow">INTERACTIEVE ZETTRAINING</div><p><strong>Speel de repertoirezetten op het bord.</strong> Tegenstanderszetten worden automatisch afgespeeld. Verkeerde zetten worden bijgehouden en krijgen een korte herhaaltermijn.</p>{(() => { let tg: Chess; try { tg = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); } catch { tg = new Chess(); } const ranks = trainingBoardFlip ? ['1','2','3','4','5','6','7','8'] : ['8','7','6','5','4','3','2','1']; const files = trainingBoardFlip ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h']; const glyph: Record<string,string> = {wp:'♙',wn:'♘',wb:'♗',wr:'♖',wq:'♕',wk:'♔',bp:'♟',bn:'♞',bb:'♝',br:'♜',bq:'♛',bk:'♚'}; const targets = trainingSelected ? tg.moves({square:trainingSelected,verbose:true}).map(m=>m.to) : []; return <><div className="training-interactive-board" role="group" aria-label="Zettraining schaakbord">{ranks.flatMap(rank => files.map(file => (file+rank) as Square)).map((sq,index) => { const p=tg.get(sq); return <button type="button" key={sq} aria-label={sq} disabled={trainingComplete} className={'training-square '+((Math.floor(index/8)+index%8)%2?'dark':'light')+(trainingSelected===sq?' selected':'')+(targets.includes(sq)?' legal-target':'')} onClick={() => handleTrainingSquare(sq)}>{p?glyph[p.color+p.type]:targets.includes(sq)?'·':''}</button>; })}</div><div className="move-entry-actions"><button className="secondary" onClick={() => setTrainingBoardFlip(v=>!v)}>Draai bord</button><button className="secondary" onClick={() => prepareBoardTraining(review)}>Herstart training</button></div><p className="training-feedback" role="status">{trainingFeedback}</p><small>{trainingComplete?'Variant voltooid':('Zet '+(trainingPly+1)+' · '+(tg.turn()==='w'?'Wit':'Zwart')+' aan zet')} · Individuele zetten in geheugen: {Object.keys(moveMemory).filter(k=>k.startsWith(review.id+':')).length}</small></>; })()}</section>
+                    <section className="move-entry-panel board-training-panel"><div className="eyebrow">INTERACTIEVE ZETTRAINING</div><p><strong>Speel de repertoirezetten op het bord.</strong> Tegenstanderszetten worden automatisch afgespeeld. Verkeerde zetten worden bijgehouden en krijgen een korte herhaaltermijn.</p>{(() => { let tg: Chess; try { tg = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); } catch { tg = new Chess(); } const ranks = trainingBoardFlip ? ['1','2','3','4','5','6','7','8'] : ['8','7','6','5','4','3','2','1']; const files = trainingBoardFlip ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h']; const glyph: Record<string,string> = {wp:'♙',wn:'♘',wb:'♗',wr:'♖',wq:'♕',wk:'♔',bp:'♟',bn:'♞',bb:'♝',br:'♜',bq:'♛',bk:'♚'}; const targets = trainingSelected ? tg.moves({square:trainingSelected,verbose:true}).map(m=>m.to) : []; return <><div className="training-interactive-board" role="group" aria-label="Zettraining schaakbord">{ranks.flatMap(rank => files.map(file => (file+rank) as Square)).map((sq,index) => { const p=tg.get(sq); return <button type="button" key={sq} aria-label={sq} disabled={trainingComplete} className={'training-square '+((Math.floor(index/8)+index%8)%2?'dark':'light')+(trainingSelected===sq?' selected':'')+(targets.includes(sq)?' legal-target':'')} onClick={() => handleTrainingSquare(sq)}>{p?glyph[p.color+p.type]:targets.includes(sq)?'·':''}</button>; })}</div><div className="move-entry-actions"><button className="secondary" onClick={() => setTrainingBoardFlip(v=>!v)}>Draai bord</button><button className="secondary" onClick={() => prepareBoardTraining(review)}>Herstart training</button></div><p className="training-feedback" role="status">{trainingFeedback}</p><div className="move-entry-actions"><button className="secondary" onClick={() => void analyzeTrainingPosition()} disabled={trainingEvalLoading}>{trainingEvalLoading?'Stockfish analyseert…':'Analyseer deze stelling'}</button></div>{trainingEval && <div className="training-engine-result"><strong>Stockfish · diepte {trainingEval.depth}</strong>{trainingEval.pvs.slice(0,3).map((pv,i)=><p key={i}><b>{pv.mate!==undefined?'Mat in '+pv.mate:( ((pv.cp??0)/100).toFixed(2)+' pionnen')}</b> — {formatPv(pv.moves)}</p>)}</div>}{trainingEvalError && <p className="training-feedback" role="status">{trainingEvalError}</p>}<small>{trainingComplete?'Variant voltooid':('Zet '+(trainingPly+1)+' · '+(tg.turn()==='w'?'Wit':'Zwart')+' aan zet')} · Individuele zetten in geheugen: {Object.keys(moveMemory).filter(k=>k.startsWith(review.id+':')).length}</small></>; })()}</section>
                     {revealed && (
                       <div className="answer-box">
                         <div className="answer-label">ZETTEN</div>
