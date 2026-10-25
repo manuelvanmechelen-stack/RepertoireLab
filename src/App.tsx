@@ -1021,6 +1021,19 @@ function App() {
     [repertoireLines, query, colorFilter]
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
+  const trainingHealth = useMemo(() => {
+    const ownMoves = Object.entries(moveMemory).filter(([key]) => lines.some(line => key.startsWith(line.id + ':')));
+    const moveAttempts = ownMoves.reduce((sum, [, item]) => sum + item.seen, 0);
+    const moveMisses = ownMoves.reduce((sum, [, item]) => sum + item.misses, 0);
+    const accuracy = moveAttempts ? Math.round((moveAttempts - moveMisses) / moveAttempts * 100) : null;
+    const weakest = [...lines].map(line => {
+      const memories = ownMoves.filter(([key]) => key.startsWith(line.id + ':')).map(([, item]) => item);
+      const misses = memories.reduce((sum, item) => sum + item.misses, 0) + (missedMoves[line.id] ?? 0);
+      const attempts = memories.reduce((sum, item) => sum + item.seen, 0);
+      return { line, misses, attempts, due: !line.due || line.due <= Date.now() || dueMoveLineIds.has(line.id) };
+    }).sort((a, b) => b.misses - a.misses || Number(b.due) - Number(a.due) || a.attempts - b.attempts).slice(0, 5);
+    return { moveAttempts, moveMisses, accuracy, weakest };
+  }, [lines, moveMemory, missedMoves]);
   const dueMoveLineIds = new Set(Object.entries(moveMemory).filter(([, item]) => item.due <= Date.now()).map(([key]) => key.slice(0, key.lastIndexOf(':'))));
   const dueCount = lines.filter(line => !line.due || line.due <= Date.now() || dueMoveLineIds.has(line.id)).length;
   const transpositions = useMemo(() => analyzeTranspositions(repertoireLines), [repertoireLines]);
@@ -2127,6 +2140,36 @@ function App() {
                   <span>Training</span>
                   <strong>{lines.length ? 'Klaar' : '—'}</strong>
                   <small>kies een variant om te starten</small>
+                </div>
+              </section>
+              <section className="study-focus-panel">
+                <div className="study-focus-heading">
+                  <div>
+                    <div className="eyebrow">PERSOONLIJKE STUDIEANALYSE</div>
+                    <h2>Wat verdient aandacht?</h2>
+                    <p>Gebruik je trainingsfouten om te bepalen welke varianten je als eerste opnieuw oefent.</p>
+                  </div>
+                  <div className="study-accuracy">
+                    <strong>{trainingHealth.accuracy === null ? '—' : trainingHealth.accuracy + '%'}</strong>
+                    <span>zetnauwkeurigheid</span>
+                  </div>
+                </div>
+                <div className="study-focus-metrics">
+                  <div><span>Geprobeerd</span><strong>{trainingHealth.moveAttempts}</strong></div>
+                  <div><span>Gemist</span><strong>{trainingHealth.moveMisses}</strong></div>
+                  <div><span>Nu te herhalen</span><strong>{dueCount}</strong></div>
+                </div>
+                {trainingHealth.weakest.length ? <div className="weak-lines-list">
+                  {trainingHealth.weakest.map(({line, misses, attempts, due}) => <div className="weak-line-row" key={line.id}>
+                    <div className={'line-badge ' + line.color.toLowerCase()}>{line.color === 'Wit' ? '♔' : '♚'}</div>
+                    <div className="weak-line-info"><strong>{line.name}</strong><span>{misses} geregistreerde missers · {attempts} zetpogingen</span></div>
+                    <span className={'weak-line-status' + (due ? ' due' : '')}>{due ? 'Te herhalen' : 'Later'}</span>
+                    <button className="text-button" onClick={() => { selectLine(line); setDueIds([line.id]); setReviewIndex(0); setRevealed(false); setTab('trainen'); }}>Train</button>
+                  </div>)}
+                </div> : <p className="study-empty">Na je eerste zettraining verschijnen hier je lastigste varianten en je nauwkeurigheid.</p>}
+                <div className="study-focus-actions">
+                  <button className="primary" onClick={() => { setDueIds([]); setReviewIndex(0); setRevealed(false); setTab('trainen'); }}>Start herhaalronde</button>
+                  <button className="secondary" onClick={() => { setDueIds(lines.map(line => line.id)); setReviewIndex(0); setRevealed(false); setTab('trainen'); }}>Train alles</button>
                 </div>
               </section>
               <section className="section-head">
