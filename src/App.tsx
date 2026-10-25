@@ -1005,7 +1005,7 @@ function App() {
         return ((await response.json()) as ExplorerResult).moves ?? [];
       };
       // Generate a bounded, multi-ply opening tree rather than just one move and one reply.
-      const maxDepth = 10;
+      const maxDepth = 40;
       const maxBranches = 36;
       const maxChildren = 3;
       const minGames = 12;
