@@ -52,6 +52,7 @@ type Line = {
   note: string;
   due: number;
   seen: number;
+  intervalDays?: number;
 };
 const seed: Line[] = [
   {
@@ -1457,18 +1458,20 @@ function App() {
   function trainResult(remembered: boolean) {
     if (!review) return;
     const nextSeen = review.seen + 1;
-    const oldInterval = Math.max(0, Math.round(((review.due || 0) - Date.now()) / 86400000));
-    const intervalDays = remembered ? Math.min(120, Math.max(1, oldInterval || (nextSeen <= 1 ? 1 : nextSeen <= 3 ? 3 : 7)) * (nextSeen <= 1 ? 2 : nextSeen <= 3 ? 2 : 1.8)) : 0;
+    const previousInterval = review.intervalDays ?? 0;
+    const intervalDays = remembered
+      ? Math.min(120, Math.max(1, previousInterval ? Math.round(previousInterval * (nextSeen <= 2 ? 2 : 1.8)) : nextSeen <= 1 ? 1 : 3))
+      : 0;
     const nextDue = remembered ? Date.now() + intervalDays * 86400000 : Date.now() + 5 * 60000;
     setLines(prev => prev.map(line => line.id === review.id ? {
-      ...line, seen: nextSeen, due: nextDue,
+      ...line, seen: nextSeen, due: nextDue, intervalDays: remembered ? intervalDays : 0,
       tags: remembered
         ? [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Opnieuw oefenen'), 'Herhaling actief'])]
         : [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Herhaling actief'), 'Opnieuw oefenen'])],
     } : line));
     setDueIds(prev => prev.filter(id => id !== review.id));
     setRevealed(false);
-    setReviewIndex(prev => prev + 1);
+    setReviewIndex(0);
     setNotice(
       remembered ? 'Goed. Deze variant komt over ongeveer ' + Math.round(intervalDays) + ' dag(en) terug.' : 'Deze variant komt over 5 minuten opnieuw terug.'
     );
