@@ -771,6 +771,42 @@ textarea:focus-visible {
   font-size: 9px;
   padding: 7px 9px;
 }
+.builder-position-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  border: 1px solid #464052;
+  border-radius: 10px;
+  background: linear-gradient(110deg, #24212f, #1a1b23 75%);
+}
+.builder-position-status > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.builder-position-status strong {
+  font: 700 13px Manrope, sans-serif;
+  color: #f0edf9;
+}
+.builder-position-status > div > span:last-child {
+  color: #a5a3b4;
+  font-size: 11px;
+}
+.builder-position-status button {
+  flex-shrink: 0;
+}
+@media (max-width: 620px) {
+  .builder-position-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .builder-position-status button {
+    width: 100%;
+  }
+}
 .move-strip {
   border-top: 1px solid #30313b;
   padding: 12px 0;
