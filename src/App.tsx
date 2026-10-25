@@ -935,6 +935,10 @@ function App() {
   const [trainingInput, setTrainingInput] = useState('');
   const [trainingFeedback, setTrainingFeedback] = useState('');
   const [trainingComplete, setTrainingComplete] = useState(false);
+  const [trainingBoardFen, setTrainingBoardFen] = useState('start');
+  const [trainingSelected, setTrainingSelected] = useState<Square | null>(null);
+  const [trainingBoardFlip, setTrainingBoardFlip] = useState(false);
+  const [moveMemory, setMoveMemory] = useState<Record<string, { seen: number; misses: number; due: number; intervalDays: number; lastResult?: 'good' | 'miss' }>>(() => { try { return JSON.parse(localStorage.getItem('repertoirelab-move-memory-v1') ?? '{}'); } catch { return {}; } });
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -961,6 +965,7 @@ function App() {
   useEffect(() => {
     localStorage.setItem('repertoirelab-missed-moves-v1', JSON.stringify(missedMoves));
   }, [missedMoves]);
+  useEffect(() => { localStorage.setItem('repertoirelab-move-memory-v1', JSON.stringify(moveMemory)); }, [moveMemory]);
   useEffect(() => {
     if (explorerToken.trim()) localStorage.setItem('repertoirelab-lichess-token-v1', explorerToken.trim());
     else localStorage.removeItem('repertoirelab-lichess-token-v1');
@@ -1615,15 +1620,25 @@ function App() {
     setNotice(imported.length + (imported.length === 1 ? ' variant geïmporteerd.' : ' varianten geïmporteerd.'));
   }
   function exportBackup() {
-    const blob = new Blob([JSON.stringify({ version: 1, lines }, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'repertoirelab-back-up.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    const backup = { app: 'RepertoireLab', version: 2, exportedAt: new Date().toISOString(), lines, repertoires, activeRepertoireId, missedMoves, moveMemory };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
+    a.download = 'repertoirelab-back-up-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice('Volledige back-up gedownload. Bewaar deze ook buiten dit apparaat.');
+  }
+  async function restoreBackup(file?: File) {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as { lines?: Line[]; repertoires?: Repertoire[]; activeRepertoireId?: string; missedMoves?: Record<string, number>; moveMemory?: typeof moveMemory };
+      if (!Array.isArray(parsed.lines) || parsed.lines.some(line => !line || typeof line.id !== 'string' || typeof line.moves !== 'string' || !['Wit','Zwart'].includes(line.color))) throw new Error('De variantenlijst is ongeldig.');
+      for (const line of parsed.lines) { try { newGame(line.moves); } catch { throw new Error('Ongeldige zetten in variant: ' + line.name + '. Er is niets gewijzigd.'); } }
+      const nextReps = Array.isArray(parsed.repertoires) ? parsed.repertoires.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string' && ['Wit','Zwart'].includes(item.color)) : [];
+      if (!window.confirm('De huidige gegevens vervangen door deze back-up? Exporteer eerst een back-up om gegevens te bewaren.')) return;
+      setLines(parsed.lines); setRepertoires(nextReps); setActiveRepertoireId(nextReps.some(item => item.id === parsed.activeRepertoireId) ? parsed.activeRepertoireId! : nextReps[0]?.id ?? '');
+      setMissedMoves(parsed.missedMoves && typeof parsed.missedMoves === 'object' ? parsed.missedMoves : {}); setMoveMemory(parsed.moveMemory && typeof parsed.moveMemory === 'object' ? parsed.moveMemory : {});
+      setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up gevalideerd en teruggezet.');
+    } catch (error) { setNotice('Back-up niet teruggezet: ' + (error instanceof Error ? error.message : 'bestand niet leesbaar.')); }
   }
   function submitTrainingMove() {
     if (!review) return;
@@ -1642,7 +1657,35 @@ function App() {
       setTrainingFeedback('Niet goed. Probeer opnieuw; denk aan de ontwikkelingszet en de dreiging in deze stelling.');
     }
   }
-  function resetMoveTraining() { setTrainingPly(0); setTrainingInput(''); setTrainingFeedback(''); setTrainingComplete(false); }
+  function isOwnTrainingPly(ply: number, color: 'Wit' | 'Zwart') { return color === 'Wit' ? ply % 2 === 0 : ply % 2 === 1; }
+  function prepareBoardTraining(line: Line | null = review) {
+    if (!line) return;
+    try { const source = newGame(line.moves); const san = source.history(); const replay = new Chess(); let ply = 0;
+      while (ply < san.length && !isOwnTrainingPly(ply, line.color)) { replay.move(san[ply]); ply++; }
+      setTrainingPly(ply); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingInput(''); setTrainingFeedback(ply >= san.length ? 'Geen eigen zetten meer in deze variant.' : 'Speel je volgende repertoirezet op het bord.'); setTrainingComplete(ply >= san.length);
+    } catch { setTrainingFeedback('Deze variant bevat ongeldige zetten.'); }
+  }
+  function handleTrainingSquare(square: Square) {
+    if (!review || trainingComplete) return;
+    const currentBoard = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); const piece = currentBoard.get(square);
+    if (!trainingSelected) { if (piece && piece.color === currentBoard.turn()) setTrainingSelected(square); return; }
+    try {
+      const played = currentBoard.move({ from: trainingSelected, to: square, promotion: 'q' });
+      if (!played) { setTrainingSelected(piece && piece.color === currentBoard.turn() ? square : null); return; }
+      const expected = newGame(review.moves).history(); const norm = (v: string) => v.replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
+      const key = review.id + ':' + trainingPly;
+      if (norm(played.san) !== norm(expected[trainingPly] ?? '')) {
+        setMoveMemory(prev => ({ ...prev, [key]: { seen: (prev[key]?.seen ?? 0) + 1, misses: (prev[key]?.misses ?? 0) + 1, due: Date.now() + 300000, intervalDays: 0, lastResult: 'miss' } }));
+        setMissedMoves(prev => ({ ...prev, [review.id]: (prev[review.id] ?? 0) + 1 })); setTrainingFeedback('Niet de opgeslagen zet. Verwacht: ' + (expected[trainingPly] ?? 'einde van de variant') + '. Probeer opnieuw.'); setTrainingSelected(null); return;
+      }
+      setMoveMemory(prev => { const old = prev[key]; const intervalDays = old?.intervalDays ? Math.min(120, Math.max(1, Math.round(old.intervalDays * 1.8))) : 1; return { ...prev, [key]: { seen: (old?.seen ?? 0) + 1, misses: old?.misses ?? 0, due: Date.now() + intervalDays * 86400000, intervalDays, lastResult: 'good' } }; });
+      let next = trainingPly + 1; const replay = new Chess(currentBoard.fen());
+      while (next < expected.length && !isOwnTrainingPly(next, review.color)) { replay.move(expected[next]); next++; }
+      setTrainingPly(next); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingFeedback(next >= expected.length ? 'Variant voltooid. Beoordeel nu hoe goed je de variant kende.' : 'Correct: ' + played.san + '. ' + (next > trainingPly + 1 ? 'Tegenzet automatisch afgespeeld. ' : '') + 'Speel de volgende repertoirezet.');
+      if (next >= expected.length) { setTrainingComplete(true); setRevealed(true); }
+    } catch { setTrainingSelected(null); }
+  }
+  function resetMoveTraining() { setTrainingPly(0); setTrainingInput(''); setTrainingFeedback(''); setTrainingComplete(false); setTrainingSelected(null); setTrainingBoardFen('start'); if (review) prepareBoardTraining(review); }
   function trainResult(remembered: boolean) {
     if (!review) return;
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
@@ -2127,6 +2170,9 @@ function App() {
                   <p>Maak aparte repertoires voor wit, zwart of verschillende openingen. Varianten horen bij het geselecteerde repertoire.</p>
                 </div>
               </div>
+              <section className="repertoire-builder backup-tools">
+                <div className="builder-actions"><div className="builder-side"><strong>Back-up en herstel</strong><span>Exporteer alle repertoires en trainingsgegevens. De gegevens staan lokaal in deze browser en kunnen verloren gaan bij het wissen van browserdata.</span><div className="move-entry-actions"><button className="primary" onClick={exportBackup}><Download size={15} /> Volledige back-up exporteren</button><label className="secondary file-restore-label">Back-up terugzetten <input type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) void restoreBackup(file); event.currentTarget.value = ''; }} /></label></div></div></div>
+              </section>
               <section className="repertoire-builder">
                 <div className="builder-actions">
                   <div className="builder-side">
@@ -2924,6 +2970,7 @@ function App() {
                       Probeer de zettenreeks hardop of op een bord na te spelen. Noteer voor jezelf ook het plan en de belangrijkste reactie van je tegenstander.
                     </p>
                     <div className="coverage-summary"><strong>Herinneringsdoel</strong><br />Noem de openingszetten in volgorde, leg één strategisch idee uit en bedenk welke tegenzet je repertoire het meest test.</div>
+                    <section className="move-entry-panel board-training-panel"><div className="eyebrow">INTERACTIEVE ZETTRAINING</div><p><strong>Speel de repertoirezetten op het bord.</strong> Tegenstanderszetten worden automatisch afgespeeld. Verkeerde zetten worden bijgehouden en krijgen een korte herhaaltermijn.</p>{(() => { let tg: Chess; try { tg = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); } catch { tg = new Chess(); } const ranks = trainingBoardFlip ? ['1','2','3','4','5','6','7','8'] : ['8','7','6','5','4','3','2','1']; const files = trainingBoardFlip ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h']; const glyph: Record<string,string> = {wp:'♙',wn:'♘',wb:'♗',wr:'♖',wq:'♕',wk:'♔',bp:'♟',bn:'♞',bb:'♝',br:'♜',bq:'♛',bk:'♚'}; const targets = trainingSelected ? tg.moves({square:trainingSelected,verbose:true}).map(m=>m.to) : []; return <><div className="training-interactive-board" role="group" aria-label="Zettraining schaakbord">{ranks.flatMap(rank => files.map(file => (file+rank) as Square)).map((sq,index) => { const p=tg.get(sq); return <button type="button" key={sq} aria-label={sq} disabled={trainingComplete} className={'training-square '+((Math.floor(index/8)+index%8)%2?'dark':'light')+(trainingSelected===sq?' selected':'')+(targets.includes(sq)?' legal-target':'')} onClick={() => handleTrainingSquare(sq)}>{p?glyph[p.color+p.type]:targets.includes(sq)?'·':''}</button>; })}</div><div className="move-entry-actions"><button className="secondary" onClick={() => setTrainingBoardFlip(v=>!v)}>Draai bord</button><button className="secondary" onClick={() => prepareBoardTraining(review)}>Herstart training</button></div><p className="training-feedback" role="status">{trainingFeedback}</p><small>{trainingComplete?'Variant voltooid':('Zet '+(trainingPly+1)+' · '+(tg.turn()==='w'?'Wit':'Zwart')+' aan zet')} · Individuele zetten in geheugen: {Object.keys(moveMemory).filter(k=>k.startsWith(review.id+':')).length}</small></>; })()}</section>
                     {revealed && (
                       <div className="answer-box">
                         <div className="answer-label">ZETTEN</div>
