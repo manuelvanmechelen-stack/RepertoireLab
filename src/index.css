@@ -1522,6 +1522,62 @@ textarea:focus-visible {
 .explorer-results > div { display: flex; flex-direction: column; gap: 5px; background: #242530; border-radius: 8px; padding: 10px; }
 .explorer-results strong { font-size: 15px; color: #e9e9f1; }
 .explorer-results span { color: #9a9bac; font-size: 10px; }
+.explorer-move-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
+}
+.add-explorer-move {
+  align-self: stretch;
+  border: 1px solid #51466e;
+  border-radius: 8px;
+  background: #292438;
+  color: #d8ceff;
+  padding: 7px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.add-explorer-move:hover:not(:disabled) {
+  background: #39304f;
+  border-color: #8d7ac9;
+}
+.add-explorer-move:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.position-coverage {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  border: 1px solid #373342;
+  border-radius: 9px;
+  background: #17171f;
+}
+.position-coverage > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.position-coverage strong { font-size: 12px; color: #e7e1f6; }
+.position-coverage span, .position-coverage small { font-size: 11px; color: #a4a2b4; }
+.position-coverage-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #353440;
+}
+.position-coverage-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #9985e0;
+  transition: width .2s ease;
+}
 .explorer-moves { display: grid; gap: 6px; }
 .explorer-move { display: grid; grid-template-columns: 55px 1fr; align-items: center; gap: 8px; text-align: left; border: 1px solid #30303b; background: #20212b; color: #e9e9f1; border-radius: 8px; padding: 9px 10px; }
 .explorer-move:hover { border-color: #8876d5; }
