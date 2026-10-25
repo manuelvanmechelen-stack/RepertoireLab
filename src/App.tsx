@@ -921,6 +921,8 @@ function App() {
   });
   const [coverage, setCoverage] = useState<Record<string, { games: number; error?: string }>>({});
   const [coverageLoading, setCoverageLoading] = useState(false);
+  const [qualityAudit, setQualityAudit] = useState<{ lineId: string; lineName: string; ply: number; san: string; severity: 'high' | 'medium'; message: string; games: number }[]>([]);
+  const [qualityLoading, setQualityLoading] = useState(false);
   const [showTranspositions, setShowTranspositions] = useState(false);
   const [showModelGames, setShowModelGames] = useState(true);
 
@@ -1033,6 +1035,53 @@ function App() {
       }
     } finally {
       setCoverageLoading(false);
+    }
+  }
+
+  async function auditRepertoireQuality() {
+    if (qualityLoading || !repertoireLines.length) return;
+    setQualityLoading(true);
+    setQualityAudit([]);
+    const findings: { lineId: string; lineName: string; ply: number; san: string; severity: 'high' | 'medium'; message: string; games: number }[] = [];
+    try {
+      for (const line of repertoireLines) {
+        let position: Chess;
+        try { position = newGame(line.moves); } catch { continue; }
+        const history = position.history({ verbose: true });
+        const replay = new Chess();
+        for (let index = 0; index < history.length; index++) {
+          const move = history[index];
+          const isOurMove = line.color === 'Wit' ? index % 2 === 0 : index % 2 === 1;
+          if (isOurMove) {
+            try {
+              const url = new URL('https://explorer.lichess.ovh/masters');
+              url.searchParams.set('variant', 'standard');
+              url.searchParams.set('fen', replay.fen());
+              url.searchParams.set('moves', '12');
+              url.searchParams.set('topGames', '0');
+              url.searchParams.set('recentGames', '0');
+              const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+              if (response.ok) {
+                const data = await response.json() as ExplorerResult;
+                const total = (data.white || 0) + (data.draws || 0) + (data.black || 0);
+                const candidate = data.moves?.find(item => item.san === move.san);
+                const games = candidate ? candidate.white + candidate.draws + candidate.black : 0;
+                if (!candidate) {
+                  findings.push({ lineId: line.id, lineName: line.name, ply: index + 1, san: move.san, severity: 'high', message: 'Deze zet komt niet voor als vervolg in de masterdatabase; controleer op een mogelijke fout of een bewuste zeldzame keuze.', games: 0 });
+                } else if (games < 20) {
+                  findings.push({ lineId: line.id, lineName: line.name, ply: index + 1, san: move.san, severity: 'medium', message: 'Weinig masterpartijen ondersteunen deze zet (' + games + '); de database geeft onvoldoende zekerheid.', games });
+                } else if (total >= 100 && games / total < 0.03) {
+                  findings.push({ lineId: line.id, lineName: line.name, ply: index + 1, san: move.san, severity: 'medium', message: 'Zeldzame keuze in deze stelling (' + Math.round(games / total * 100) + '% van de masterpartijen); vergelijk met de populairste alternatieven.', games });
+                }
+              }
+            } catch { /* Network errors should not interrupt the rest of the audit. */ }
+          }
+          try { replay.move(move.san); } catch { break; }
+        }
+        setQualityAudit([...findings]);
+      }
+    } finally {
+      setQualityLoading(false);
     }
   }
 
@@ -2070,7 +2119,19 @@ function App() {
                     <p>Controleer hoe vaak de eindstelling van elke opgeslagen lijn voorkomt in de Lichess-masterdatabase. Als een stelling vaker voorkomt dan je doel, voeg dan meer zetten toe en controleer opnieuw. Het doel wordt op dit apparaat bewaard.</p>
                     <button className="primary" onClick={checkRepertoireCoverage} disabled={coverageLoading}>{coverageLoading ? 'Database controleren…' : 'Controleer openingsdiepte'}</button>
                   </div>
+                  <div>
+                    <p>Controleer je eigen zetten in dit repertoire tegen masterpartijen. De controle vindt ongebruikelijke of onvoldoende onderbouwde zetten, maar vervangt geen engine-analyse.</p>
+                    <button className="secondary" onClick={auditRepertoireQuality} disabled={qualityLoading || !repertoireLines.length}>{qualityLoading ? 'Zetten controleren…' : 'Analyseer repertoirekwaliteit'}</button>
+                  </div>
                 </div>
+                {qualityAudit.length > 0 && <section className="coverage-results">
+                  <div className="coverage-summary"><strong>Kwaliteitscontrole:</strong> {qualityAudit.filter(item => item.severity === 'high').length} kritieke aandachtspunten en {qualityAudit.filter(item => item.severity === 'medium').length} zetten om nader te bekijken. Dit zijn databasewaarschuwingen, geen bewezen blunders.</div>
+                  {qualityAudit.map((item, index) => <div className="coverage-row" key={item.lineId + '-' + item.ply + '-' + index}>
+                    <div><strong>{item.lineName} · zet {item.ply}: {item.san}</strong><span>{item.message}</span></div>
+                    <button className="text-button" onClick={() => { const line = lines.find(candidate => candidate.id === item.lineId); if (line) { setActive(line.id); setGame(newGame(line.moves)); setTab('repertoire'); } }}>Bekijk lijn</button>
+                  </div>)}
+                </section>}
+                {qualityAudit.length === 0 && !qualityLoading && false && <div />}
                 {Object.keys(coverage).length > 0 && (<>
                   <div className="coverage-summary">
                     Repertoirediepte: {Math.round(Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length / Math.max(1, Object.keys(coverage).length) * 100)}% van de gecontroleerde lijnen zit onder je frequentiedoel. Dit meet dekking/diepte, niet de objectieve schaakkwaliteit.
