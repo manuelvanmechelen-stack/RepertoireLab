@@ -31,12 +31,10 @@ type ExplorerMove = {
   black: number;
   averageRating?: number;
 };
+type ExplorerGame = { id: string; winner?: 'white' | 'black' | null; year?: number; month?: string; players?: { white?: { name?: string; rating?: number }; black?: { name?: string; rating?: number } } };
 type ExplorerResult = {
   opening?: { eco?: string; name?: string };
-  white: number;
-  draws: number;
-  black: number;
-  moves: ExplorerMove[];
+  white: number; draws: number; black: number; moves: ExplorerMove[]; topGames?: ExplorerGame[];
 };
 type CloudEval = {
   depth: number;
@@ -832,6 +830,24 @@ function cloneGame(source: Chess) {
   copy.load(source.fen());
   return copy;
 }
+function positionSignature(game: Chess) { return game.fen().split(' ').slice(0, 4).join(' '); }
+function analyzeTranspositions(lines: Line[]) {
+  const positions = new Map<string, { histories: Set<string>; names: Set<string>; ply: number }>();
+  for (const line of lines) {
+    try {
+      const game = new Chess(); const history: string[] = [];
+      for (const move of newGame(line.moves).history({ verbose: true })) {
+        game.move(move.san); history.push(move.san);
+        const key = positionSignature(game);
+        const item = positions.get(key) ?? { histories: new Set<string>(), names: new Set<string>(), ply: history.length };
+        item.histories.add(history.join(' ')); item.names.add(line.name); item.ply = Math.min(item.ply, history.length); positions.set(key, item);
+      }
+    } catch { /* skip invalid legacy PGNs */ }
+  }
+  return [...positions.entries()].filter(([, item]) => item.histories.size > 1)
+    .map(([fen, item]) => ({ fen, paths: item.histories.size, names: [...item.names], ply: item.ply }))
+    .sort((a, b) => b.names.length - a.names.length || a.ply - b.ply).slice(0, 20);
+}
 function App() {
   const [lines, setLines] = useState<Line[]>(() => {
     try {
@@ -901,6 +917,8 @@ function App() {
   });
   const [coverage, setCoverage] = useState<Record<string, { games: number; error?: string }>>({});
   const [coverageLoading, setCoverageLoading] = useState(false);
+  const [showTranspositions, setShowTranspositions] = useState(false);
+  const [showModelGames, setShowModelGames] = useState(true);
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -972,9 +990,9 @@ function App() {
     [repertoireLines, query, colorFilter]
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
-  const reviewLines = lines.filter(line =>
-    dueIds.length ? dueIds.includes(line.id) : true
-  );
+  const dueCount = lines.filter(line => !line.due || line.due <= Date.now()).length;
+  const transpositions = useMemo(() => analyzeTranspositions(repertoireLines), [repertoireLines]);
+  const reviewLines = lines.filter(line => dueIds.length ? dueIds.includes(line.id) : (!line.due || line.due <= Date.now()));
   const review = reviewLines.length
     ? reviewLines[reviewIndex % reviewLines.length]
     : null;
@@ -1438,24 +1456,21 @@ function App() {
   }
   function trainResult(remembered: boolean) {
     if (!review) return;
-    setLines(prev =>
-      prev.map(line =>
-        line.id === review.id
-          ? {
-              ...line,
-              seen: line.seen + 1,
-              due: Date.now() + (remembered ? 86400000 * 3 : 60000),
-            }
-          : line
-      )
-    );
+    const nextSeen = review.seen + 1;
+    const oldInterval = Math.max(0, Math.round(((review.due || 0) - Date.now()) / 86400000));
+    const intervalDays = remembered ? Math.min(120, Math.max(1, oldInterval || (nextSeen <= 1 ? 1 : nextSeen <= 3 ? 3 : 7)) * (nextSeen <= 1 ? 2 : nextSeen <= 3 ? 2 : 1.8)) : 0;
+    const nextDue = remembered ? Date.now() + intervalDays * 86400000 : Date.now() + 5 * 60000;
+    setLines(prev => prev.map(line => line.id === review.id ? {
+      ...line, seen: nextSeen, due: nextDue,
+      tags: remembered
+        ? [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Opnieuw oefenen'), 'Herhaling actief'])]
+        : [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Herhaling actief'), 'Opnieuw oefenen'])],
+    } : line));
     setDueIds(prev => prev.filter(id => id !== review.id));
     setRevealed(false);
     setReviewIndex(prev => prev + 1);
     setNotice(
-      remembered
-        ? 'Goed. Deze variant komt later terug.'
-        : 'Deze variant komt binnenkort opnieuw terug.'
+      remembered ? 'Goed. Deze variant komt over ongeveer ' + Math.round(intervalDays) + ' dag(en) terug.' : 'Deze variant komt over 5 minuten opnieuw terug.'
     );
   }
   function loadFen() {
@@ -1484,7 +1499,7 @@ function App() {
       url.searchParams.set('variant', 'standard');
       url.searchParams.set('fen', requestedFen);
       url.searchParams.set('moves', '8');
-      url.searchParams.set('topGames', '0');
+      url.searchParams.set('topGames', '5');
       url.searchParams.set('recentGames', '0');
       if (explorerSource === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
       const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
@@ -1588,7 +1603,7 @@ function App() {
       explorerUrl.searchParams.set('variant', 'standard');
       explorerUrl.searchParams.set('fen', requestedFen);
       explorerUrl.searchParams.set('moves', '8');
-      explorerUrl.searchParams.set('topGames', '0');
+      explorerUrl.searchParams.set('topGames', '5');
       explorerUrl.searchParams.set('recentGames', '0');
       if (explorerSource === 'lichess' && ratingBand !== 'all') explorerUrl.searchParams.set('ratings', ratingBand);
       const explorerResponse = await fetch(explorerUrl.toString(), { headers: { Accept: 'application/json' } });
@@ -2025,6 +2040,15 @@ function App() {
                     })}
                   </div>
                 </>)}
+                {activeRepertoire && <section className="repertoire-insights">
+                  <div className="insights-heading"><div><div className="eyebrow">STRUCTUURCONTROLE</div><h3>Transposities en herhalingen</h3><p>Zoek dezelfde stelling die via verschillende zettenreeksen ontstaat. Rokaderechten en en-passantrecht tellen mee.</p></div>
+                    <button className="secondary" onClick={() => setShowTranspositions(value => !value)}>{showTranspositions ? 'Verbergen' : 'Toon analyse'} · {transpositions.length}</button></div>
+                  {showTranspositions && <div className="coverage-results">{transpositions.length ? transpositions.map(item => <div className="coverage-row" key={item.fen}>
+                    <div><strong>{item.paths} zettenreeksen · ply {item.ply}</strong><span>{item.names.slice(0, 4).join(' · ')}{item.names.length > 4 ? ' …' : ''}</span><code>{item.fen}</code></div>
+                    <button className="secondary" onClick={() => { const candidate = new Chess(); try { candidate.load(item.fen + ' 0 1'); setGame(candidate); setSelected(null); setNotice('Transpositiepositie geladen. Zoek de database of voeg een vervolg toe.'); } catch { setNotice('Deze transpositie kon niet worden geladen.'); } }}>Stelling laden</button>
+                  </div>) : <div className="empty-state">Geen transposities gevonden in dit repertoire. Dit kan veranderen zodra je meer varianten toevoegt.</div>}</div>}
+                  <div className="insights-metrics"><div><strong>{repertoireLines.length}</strong><span>varianten</span></div><div><strong>{repertoireLines.reduce((sum, line) => sum + newGame(line.moves).history().length, 0)}</strong><span>halve zetten, inclusief overlap</span></div><div><strong>{repertoireLines.filter(line => !line.due || line.due <= Date.now()).length}</strong><span>varianten klaar voor herhaling</span></div></div>
+                </section>}
                 <div className="coverage-settings">
                   <div>
                     <h3>Partijen controleren tegen je repertoire</h3>
@@ -2380,6 +2404,13 @@ function App() {
                               <small>{missingMoves.length ? 'Nog niet opgenomen: ' + missingMoves.slice(0, 6).map(move => move.san).join(', ') + (missingMoves.length > 6 ? ' …' : '') : 'Alle getoonde databasezetten zijn al vertegenwoordigd in je repertoire.'}</small>
                             </div>;
                           })()}
+                          {showModelGames && (explorer.topGames?.length ?? 0) > 0 && <section className="model-games">
+                            <div className="model-games-heading"><strong>Modelpartijen uit deze stelling</strong><button className="text-button" onClick={() => setShowModelGames(false)}>Verbergen</button></div>
+                            <p>Open een partij om te zien hoe sterke spelers de opening verder behandelen.</p>
+                            {explorer.topGames?.map((model, index) => <a className="model-game-row" key={model.id + index} href={'https://lichess.org/' + encodeURIComponent(model.id)} target="_blank" rel="noreferrer">
+                              <span className="model-game-number">{index + 1}</span><span className="model-game-players"><strong>{model.players?.white?.name ?? 'Wit'} {model.players?.white?.rating ? '(' + model.players.white.rating + ')' : ''} – {model.players?.black?.name ?? 'Zwart'} {model.players?.black?.rating ? '(' + model.players.black.rating + ')' : ''}</strong><small>{model.year ?? ''}{model.month ? '-' + model.month : ''} · {model.winner === 'white' ? 'Wit wint' : model.winner === 'black' ? 'Zwart wint' : 'Remise / onbekend'}</small></span><ChevronRight size={15} />
+                            </a>)}
+                          </section>}
                           <div className="explorer-moves">
                             {recommendedMoves.map((move, index) => {
                               const total = move.total;
@@ -2633,7 +2664,7 @@ function App() {
                 <div className="training-count">
                   <Brain size={20} />
                   <strong>{reviewLines.length}</strong>
-                  <span>varianten in sessie</span>
+                  <span>varianten klaar · {dueCount} te herhalen</span>
                 </div>
               </div>
               {review ? (
@@ -2725,16 +2756,8 @@ function App() {
                         />
                       </div>
                     </div>
-                    <button
-                      className="secondary full-width"
-                      onClick={() => {
-                        setDueIds(lines.map(line => line.id));
-                        setReviewIndex(0);
-                        setRevealed(false);
-                      }}
-                    >
-                      Train alle varianten
-                    </button>
+                    <button className="secondary full-width" onClick={() => { setDueIds([]); setReviewIndex(0); setRevealed(false); }}>Train alleen wat nu aan de beurt is</button>
+                    <button className="secondary full-width" onClick={() => { setDueIds(lines.map(line => line.id)); setReviewIndex(0); setRevealed(false); }}>Train alle varianten</button>
                   </div>
                 </div>
               ) : (
