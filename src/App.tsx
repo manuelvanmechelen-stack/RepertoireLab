@@ -1026,7 +1026,7 @@ function App() {
       const maxChildren = 3;
       const minGames = 12;
       const additions: Line[] = [];
-      const known = new Set(lines.map(line => {
+      const known = new Set(repertoireLines.map(line => {
         try { return newGame(line.moves).history().join(' '); } catch { return ''; }
       }));
       const walk = async (position: Chess, path: string[], depth: number): Promise<void> => {
@@ -1056,6 +1056,7 @@ function App() {
             } catch { continue; }
             additions.push({
               id: crypto.randomUUID(),
+              repertoireId: activeRepertoireId,
               name: (current?.name ?? 'Variant') + ' — ' + nextPath.join(' '),
               color: current?.color ?? (prefix.length % 2 === 0 ? 'Wit' : 'Zwart'),
               moves: saved.pgn(),
@@ -1257,11 +1258,13 @@ function App() {
   function importPgn() {
     const candidate = new Chess();
     try {
+      if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan voordat je PGN importeert.'); return; }
       candidate.loadPgn(pgnInput);
       const line: Line = {
         id: crypto.randomUUID(),
+        repertoireId: activeRepertoire.id,
         name: 'Geïmporteerde partij',
-        color: 'Wit',
+        color: activeRepertoire.color,
         moves: pgnInput.trim(),
         tags: ['PGN-import'],
         note: 'Geïmporteerd via PGN.',
