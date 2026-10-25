@@ -1665,12 +1665,7 @@ function App() {
       setLines(validated.lines); setRepertoires(validated.repertoires); setActiveRepertoireId(validated.activeRepertoireId);
       setMissedMoves(validated.missedMoves); setMoveMemory(validated.moveMemory);
       setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up volledig gecontroleerd en teruggezet.');
-      const chosenRepertoire = typeof parsed.activeRepertoireId === 'string' && nextReps.some(item => item.id === parsed.activeRepertoireId)
-        ? parsed.activeRepertoireId : nextReps[0]?.id ?? '';
-      setLines(nextLines); setRepertoires(nextReps); setActiveRepertoireId(chosenRepertoire);
-      setMissedMoves(parsed.missedMoves === undefined ? {} : parsed.missedMoves as Record<string, number>);
-      setMoveMemory(parsed.moveMemory === undefined ? {} : parsed.moveMemory as typeof moveMemory);
-      setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up volledig gecontroleerd en teruggezet.');
+
     } catch (error) { setNotice('Back-up niet teruggezet: ' + (error instanceof Error ? error.message : 'bestand niet leesbaar.')); }
   }
   function submitTrainingMove() {
