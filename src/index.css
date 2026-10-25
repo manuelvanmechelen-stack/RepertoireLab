@@ -1873,3 +1873,25 @@ textarea:focus-visible {
 
 /* Adaptive move review and engine feedback */
 .training-engine-result{margin:12px 0;padding:13px 15px;border:1px solid #383443;background:#1c1b25;border-radius:10px}.training-engine-result>strong{color:#c7baff;font-size:12px}.training-engine-result p{font-size:12px;color:#c5c4d2;line-height:1.5;margin:8px 0 0;overflow-wrap:anywhere}.training-engine-result b{color:#f0eaff}
+
+
+/* Study analytics and actionable weak-line queue */
+.study-focus-panel{margin:22px 0 26px;padding:20px;border:1px solid #353241;border-radius:15px;background:linear-gradient(140deg,#201e2a,#17181f 75%)}
+.study-focus-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.study-focus-heading h2{font:800 20px Manrope,sans-serif;margin:7px 0}
+.study-focus-heading p{max-width:620px;color:#a4a3b4;font-size:12px;line-height:1.6;margin:0}
+.study-accuracy{flex-shrink:0;min-width:90px;padding:10px 12px;border-radius:10px;border:1px solid #3b354d;background:#17151f;text-align:center}
+.study-accuracy strong{display:block;color:#d5caff;font:800 23px Manrope,sans-serif}
+.study-accuracy span{font-size:9px;color:#9b98ac}
+.study-focus-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:16px 0}
+.study-focus-metrics>div{padding:11px 13px;border:1px solid #302f3b;background:#15161d;border-radius:9px;display:flex;flex-direction:column;gap:4px}
+.study-focus-metrics span{color:#9b9baa;font-size:10px}.study-focus-metrics strong{font:700 18px Manrope,sans-serif}
+.weak-lines-list{border-top:1px solid #34313f}
+.weak-line-row{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid #302f3a}
+.weak-line-info{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.weak-line-info strong{font-size:11px;overflow-wrap:anywhere}.weak-line-info span{font-size:10px;color:#9999aa}
+.weak-line-status{font-size:9px;color:#9292a2;white-space:nowrap}.weak-line-status.due{color:#f2bd79}
+.weak-line-row .text-button{flex-shrink:0}
+.study-empty{font-size:12px;color:#9d9dad;line-height:1.6;padding:10px 0}
+.study-focus-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+@media(max-width:560px){.study-focus-panel{padding:14px}.study-focus-heading{align-items:stretch;flex-direction:column}.study-accuracy{align-self:flex-start}.study-focus-metrics{gap:6px}.study-focus-metrics>div{padding:9px}.weak-line-row{flex-wrap:wrap}.weak-line-info{min-width:calc(100% - 60px)}.weak-line-status{margin-left:38px}.study-focus-actions{flex-direction:column}.study-focus-actions button{width:100%}}
