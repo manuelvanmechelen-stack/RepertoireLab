@@ -2050,13 +2050,29 @@ function App() {
                       </div>
                     </div>
                     <section className="move-entry-panel">
-                      <div className="eyebrow">ZETTEN INVOEREN</div>
-                      <p>Voer SAN-notatie in (bijv. <strong>Nf3 Nc6 d4</strong>) of UCI-zetten (bijv. <strong>g1f3 b8c6</strong>). De zetten worden vanaf de huidige stelling gespeeld.</p>
-                      <textarea value={moveInput} onChange={event => setMoveInput(event.target.value)} placeholder="Nf3 Nc6 d4 d5" rows={2} />
+                      <div className="eyebrow">VARIANT OPBOUWEN</div>
+                      <p><strong>Speel je zetten direct op het schaakbord.</strong> Klik eerst op een stuk en daarna op het bestemmingsveld. De zetten worden in volgorde bijgehouden. Je kunt daarna de variant opslaan of verder uitbreiden.</p>
                       <div className="move-entry-actions">
-                        <button className="primary" onClick={enterMoves}>Speel zetten</button>
-                        <button className="secondary" onClick={() => setMoveInput('')}>Wissen</button>
+                        <button className="secondary" onClick={() => {
+                          const history = game.history();
+                          if (!history.length) return;
+                          const copy = new Chess(game.fen());
+                          copy.undo();
+                          setGame(copy);
+                          setSelected(null);
+                          setNotice('Laatste zet ongedaan gemaakt.');
+                        }} disabled={!game.history().length}>Laatste zet ongedaan maken</button>
+                        <button className="secondary" onClick={resetBoard}>Begin opnieuw</button>
+                        <button className="primary" onClick={replaceCurrentLine} disabled={!current || !game.history().length}>Sla op in geselecteerde variant</button>
                       </div>
+                      <details className="move-entry-notation">
+                        <summary>Of voer zetten in via notatie</summary>
+                        <textarea value={moveInput} onChange={event => setMoveInput(event.target.value)} placeholder="Nf3 Nc6 d4 d5" rows={2} />
+                        <div className="move-entry-actions">
+                          <button className="primary" onClick={enterMoves}>Speel notatie</button>
+                          <button className="secondary" onClick={() => setMoveInput('')}>Wissen</button>
+                        </div>
+                      </details>
                     </section>
                     <div className="fen-row">
                       <input
