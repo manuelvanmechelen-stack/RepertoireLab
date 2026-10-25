@@ -63,7 +63,7 @@ check(ep.moves({ square: 'e5' }).includes('exd6'), 'en-passant-slag moet legaal 
 play(ep, 'exd6');
 equal(ep.get('d5'), undefined, 'en-passant moet de geslagen pion verwijderen');
 
-const promotion = new Chess('8/P7/8/8/8/8/7k/7K w - - 0 1');
+const promotion = new Chess('8/P7/8/8/8/7k/8/7K w - - 0 1');
 check(promotion.moves({ square: 'a7' }).some(m => m.startsWith('a8=')), 'promotiezetten moeten worden gegenereerd');
 play(promotion, 'a8=Q');
 equal(promotion.get('a8')?.type, 'q', 'promotie moet dame opleveren');
