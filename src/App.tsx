@@ -1773,13 +1773,38 @@ function App() {
               <div className="page-heading">
                 <div>
                   <div className="eyebrow">OPENINGEN & VARIANTEN</div>
-                  <h1>Mijn repertoire</h1>
-                  <p>Je openingskennis, overzichtelijk op één plek.</p>
+                  <h1>Mijn repertoires</h1>
+                  <p>Maak aparte repertoires voor wit, zwart of verschillende openingen. Varianten horen bij het geselecteerde repertoire.</p>
                 </div>
-                <button className="primary" onClick={() => setShowAdd(true)}>
-                  <Plus size={17} /> Nieuwe variant
-                </button>
               </div>
+              <section className="repertoire-builder">
+                <div className="builder-actions">
+                  <div className="builder-side">
+                    <strong>Nieuw repertoire</strong>
+                    <input aria-label="Naam nieuw repertoire" value={newRepertoireName} onChange={event => setNewRepertoireName(event.target.value)} placeholder="Bijv. Schots — wit" />
+                    <select aria-label="Kleur nieuw repertoire" value={newColor} onChange={event => setNewColor(event.target.value as 'Wit' | 'Zwart')}>
+                      <option value="Wit">Wit</option><option value="Zwart">Zwart</option>
+                    </select>
+                    <button className="primary" onClick={createRepertoire}><Plus size={16} /> Repertoire aanmaken</button>
+                  </div>
+                  <div className="builder-side">
+                    <strong>Geselecteerd repertoire</strong>
+                    <select aria-label="Actief repertoire" value={activeRepertoireId} onChange={event => {
+                      const id = event.target.value;
+                      setActiveRepertoireId(id);
+                      const first = lines.find(line => line.repertoireId === id);
+                      setActive(first?.id ?? '');
+                      setGame(newGame(first?.moves));
+                      setSelected(null);
+                    }}>
+                      <option value="">Kies een repertoire…</option>
+                      {repertoires.map(item => <option key={item.id} value={item.id}>{item.name} ({item.color})</option>)}
+                    </select>
+                    <span>{activeRepertoire ? repertoireLines.length + ' varianten in ' + activeRepertoire.name : 'Maak of selecteer eerst een repertoire.'}</span>
+                    {activeRepertoire && <button className="primary" onClick={() => { setNewName(''); setNewMoves(''); setNewColor(activeRepertoire.color); setShowAdd(true); }}><Plus size={16} /> Variant toevoegen</button>}
+                  </div>
+                </div>
+              </section>
               <section className="repertoire-builder">
                 <div className="builder-heading">
                   <div>
@@ -1952,7 +1977,7 @@ function App() {
                         </div>
                       </div>
                       <div className="branch-save-row">
-                        {!lines.length && (
+                        {!repertoireLines.length && activeRepertoire && (
                           <select aria-label="Kleur van het repertoire" value={newColor} onChange={event => setNewColor(event.target.value as 'Wit' | 'Zwart')}>
                             <option value="Wit">Repertoire voor wit</option>
                             <option value="Zwart">Repertoire voor zwart</option>
@@ -1962,15 +1987,15 @@ function App() {
                           aria-label="Naam van nieuwe variant of vertakking"
                           value={branchName}
                           onChange={event => setBranchName(event.target.value)}
-                          placeholder={lines.length ? "Naam nieuwe variant, bijv. Schots — 4...Nf6" : "Naam van je eerste variant"}
+                          placeholder={repertoireLines.length ? "Naam nieuwe variant, bijv. 4...Nf6" : "Naam van je eerste variant"}
                         />
-                        <button className="primary" onClick={saveCurrentBranch}>{lines.length ? 'Variant / vertakking opslaan' : 'Eerste variant opslaan'}</button>
-                        <button className="secondary" disabled={!lines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
+                        <button className="primary" onClick={saveCurrentBranch}>{repertoireLines.length ? 'Variant opslaan' : 'Eerste variant opslaan'}</button>
+                        <button className="secondary" disabled={!repertoireLines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
                       <details className="move-tree-details">
-                        <summary>Bekijk alle lijnen als zettenboom ({lines.length} varianten)</summary>
+                        <summary>Bekijk alle lijnen als zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">
-                          {lines.map(line => {
+                          {repertoireLines.map(line => {
                             const history = newGame(line.moves).history();
                             return (
                               <div className={'move-tree-line ' + (line.id === active ? 'current' : '')} key={line.id}>
