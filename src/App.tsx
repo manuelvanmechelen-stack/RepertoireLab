@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
+import { scheduleMoveResult, scheduleLineResult, selectDueOwnPly } from './study/scheduling.mjs';
 import {
   BarChart3,
   BookOpen,
@@ -1734,10 +1735,8 @@ function App() {
     if (!line) return;
     try {
       const san = newGame(line.moves).history(); const replay = new Chess(); let ply = 0;
-      const lineIsDue = !line.due || line.due <= Date.now();
-      // When a line is not due but one of its moves is, start at the earliest due repertoire move.
-      const duePly = lineIsDue ? 0 : san.findIndex((_, index) => isOwnTrainingPly(index, line.color) && (moveMemory[line.id + ':' + index]?.due ?? Infinity) <= Date.now());
-      const startAt = duePly >= 0 ? duePly : 0;
+      // Start at the earliest due move when the whole line is not yet due.
+      const startAt = selectDueOwnPly(san.length, line.color, moveMemory, line.id, line.due, Date.now());
       while (ply < startAt) { replay.move(san[ply]); ply++; }
       while (ply < san.length && !isOwnTrainingPly(ply, line.color)) { replay.move(san[ply]); ply++; }
       setTrainingPly(ply); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingInput(''); setTrainingEval(null); setTrainingEvalError('');
@@ -1766,10 +1765,10 @@ function App() {
       const norm = (v: string) => v.replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
       const key = review.id + ':' + trainingPly;
       if (norm(played.san) !== norm(expected[trainingPly] ?? '')) {
-        setMoveMemory(prev => ({ ...prev, [key]: { seen: (prev[key]?.seen ?? 0) + 1, misses: (prev[key]?.misses ?? 0) + 1, due: Date.now() + 300000, intervalDays: 0, lastResult: 'miss' } }));
+        setMoveMemory(prev => ({ ...prev, [key]: scheduleMoveResult(prev[key], false) }));
         setMissedMoves(prev => ({ ...prev, [review.id]: (prev[review.id] ?? 0) + 1 })); setTrainingFeedback('Niet de opgeslagen zet. Verwacht: ' + (expected[trainingPly] ?? 'einde van de variant') + '. Probeer opnieuw.'); setTrainingSelected(null); return;
       }
-      setMoveMemory(prev => { const old = prev[key]; const intervalDays = old?.intervalDays ? Math.min(120, Math.max(1, Math.round(old.intervalDays * 1.8))) : 1; return { ...prev, [key]: { seen: (old?.seen ?? 0) + 1, misses: old?.misses ?? 0, due: Date.now() + intervalDays * 86400000, intervalDays, lastResult: 'good' } }; });
+      setMoveMemory(prev => ({ ...prev, [key]: scheduleMoveResult(prev[key], true) }));
       let next = trainingPly + 1; const replay = new Chess(currentBoard.fen());
       while (next < expected.length && !isOwnTrainingPly(next, review.color)) { replay.move(expected[next]); next++; }
       setTrainingPly(next); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingFeedback(next >= expected.length ? 'Variant voltooid. Beoordeel nu hoe goed je de variant kende.' : 'Correct: ' + played.san + '. ' + (next > trainingPly + 1 ? 'Tegenzet automatisch afgespeeld. ' : '') + 'Speel de volgende repertoirezet.');
@@ -1780,13 +1779,11 @@ function App() {
   function trainResult(remembered: boolean) {
     if (!review) return;
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
-    const nextSeen = review.seen + 1;
-    const previousInterval = review.intervalDays ?? 0;
     const recentMoveMisses = Object.entries(moveMemory).filter(([key, item]) => key.startsWith(review.id + ':') && item.lastResult === 'miss' && item.due > Date.now() - 7 * 86400000).length;
-    const intervalDays = remembered
-      ? Math.min(120, Math.max(1, recentMoveMisses ? 1 : previousInterval ? Math.round(previousInterval * (nextSeen <= 2 ? 2 : 1.8)) : nextSeen <= 1 ? 1 : 3))
-      : 0;
-    const nextDue = remembered ? Date.now() + intervalDays * 86400000 : Date.now() + 5 * 60000;
+    const scheduled = scheduleLineResult(review, remembered, recentMoveMisses);
+    const nextSeen = scheduled.seen;
+    const intervalDays = scheduled.intervalDays;
+    const nextDue = scheduled.due;
     setLines(prev => prev.map(line => line.id === review.id ? {
       ...line, seen: nextSeen, due: nextDue, intervalDays: remembered ? intervalDays : 0,
       tags: remembered
