@@ -43,8 +43,10 @@ type CloudEval = {
   knodes: number;
   pvs: Array<{ moves: string; cp?: number; mate?: number }>;
 };
+type Repertoire = { id: string; name: string; color: 'Wit' | 'Zwart'; createdAt: number };
 type Line = {
   id: string;
+  repertoireId?: string;
   name: string;
   color: 'Wit' | 'Zwart';
   moves: string;
@@ -834,6 +836,12 @@ function App() {
     }
   });
   const [active, setActive] = useState('');
+  const [repertoires, setRepertoires] = useState<Repertoire[]>(() => {
+    try { const saved = localStorage.getItem('repertoirelab-repertoires-v1'); return saved ? JSON.parse(saved) as Repertoire[] : []; } catch { return []; }
+  });
+  const [activeRepertoireId, setActiveRepertoireId] = useState(() => localStorage.getItem('repertoirelab-active-repertoire-v1') ?? '');
+  const [newRepertoireName, setNewRepertoireName] = useState('');
+
   const [tab, setTab] = useState<'overzicht' | 'repertoire' | 'trainen'>(
     'overzicht'
   );
@@ -883,20 +891,19 @@ function App() {
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
   }, [lines]);
+  useEffect(() => { localStorage.setItem('repertoirelab-repertoires-v1', JSON.stringify(repertoires)); }, [repertoires]);
+  useEffect(() => { localStorage.setItem('repertoirelab-active-repertoire-v1', activeRepertoireId); }, [activeRepertoireId]);
+
   useEffect(() => {
     localStorage.setItem('repertoirelab-position-goal-v1', String(positionGoal));
   }, [positionGoal]);
   // Keep the study board available even before the first user-created line exists.
   // The draft is UI state only; it is not saved as a pre-installed repertoire.
-  const current = lines.find(line => line.id === active) ?? lines[0] ?? {
-    id: '__draft__',
-    name: 'Nieuw repertoire',
-    color: newColor,
-    moves: '',
-    tags: [],
-    note: '',
-    due: 0,
-    seen: 0,
+  const activeRepertoire = repertoires.find(item => item.id === activeRepertoireId) ?? null;
+  const repertoireLines = activeRepertoireId ? lines.filter(line => line.repertoireId === activeRepertoireId) : [];
+  const current = repertoireLines.find(line => line.id === active) ?? repertoireLines[0] ?? {
+    id: '__draft__', repertoireId: activeRepertoireId, name: activeRepertoire?.name ?? 'Nieuw repertoire',
+    color: activeRepertoire?.color ?? newColor, moves: '', tags: [], note: '', due: 0, seen: 0,
   };
   const recommendedMoves = useMemo(() => {
     if (!explorer?.moves?.length || explorerFen !== game.fen()) return [];
@@ -920,7 +927,7 @@ function App() {
   }, [explorer, explorerFen, evalResult, evalFen, game]);
   const filtered = useMemo(
     () =>
-      lines.filter(
+      repertoireLines.filter(
         line =>
           (colorFilter === 'Alles' || line.color === colorFilter) &&
           (
@@ -935,7 +942,7 @@ function App() {
             .toLowerCase()
             .includes(query.toLowerCase())
       ),
-    [lines, query, colorFilter]
+    [repertoireLines, query, colorFilter]
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
   const reviewLines = lines.filter(line =>
