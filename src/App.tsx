@@ -1024,6 +1024,7 @@ function App() {
   const review = reviewLines.length
     ? reviewLines[reviewIndex % reviewLines.length]
     : null;
+  useEffect(() => { if (review) prepareBoardTraining(review); }, [review?.id]);
   const board = game.board();
   const legalTargets = selected
     ? game.moves({ square: selected, verbose: true }).map(move => move.to)
