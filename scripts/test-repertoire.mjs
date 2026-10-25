@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
+import { validateBackup } from '../src/study/backup.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -198,5 +199,23 @@ check(collection[0].includes('Game one') && collection[1].includes('Game two'), 
 equal(splitPgnCollection('   ').length, 0, 'lege PGN levert geen partijen op');
 equal(splitPgnCollection('1. e4 e5').length, 1, 'PGN zonder Event-header blijft één invoer');
 equal(splitPgnCollection(gameOne).length, 1, 'één PGN-partij blijft één invoer');
+
+// 11. Exercise the exact backup validator used by the restore UI.
+const checkedBackup = validateBackup(backup);
+equal(checkedBackup.lines.length, 1, 'validator accepteert geldige variant');
+equal(checkedBackup.repertoires.length, 1, 'validator accepteert geldig repertoire');
+equal(checkedBackup.activeRepertoireId, 'rep-1', 'validator bewaart geldig actieve repertoire');
+equal(checkedBackup.moveMemory['line-1:0'].misses, 1, 'validator bewaart herhalingsgegevens');
+throws(() => validateBackup({ lines: [backup.lines[0], backup.lines[0]] }), 'dubbele variant-ID wordt afgewezen');
+throws(() => validateBackup({ ...backup, lines: [{ ...backup.lines[0], moves: '1. e4 Qh9' }] }), 'ongeldige PGN in back-up wordt afgewezen');
+throws(() => validateBackup({ ...backup, repertoires: [{ ...backup.repertoires[0] }, { ...backup.repertoires[0] }] }), 'dubbele repertoire-ID wordt afgewezen');
+throws(() => validateBackup({ ...backup, missedMoves: { broken: -1 } }), 'negatieve foutenteller wordt afgewezen');
+throws(() => validateBackup({ ...backup, moveMemory: { broken: { seen: -1, misses: 0, due: 0, intervalDays: 0 } } }), 'negatieve geheugenwaarde wordt afgewezen');
+throws(() => validateBackup({ lines: [{ ...backup.lines[0], color: 'Paars' }] }), 'onbekende kleur wordt afgewezen');
+const fallbackBackup = validateBackup({ ...backup, activeRepertoireId: 'missing-id' });
+equal(fallbackBackup.activeRepertoireId, 'rep-1', 'ongeldige actieve repertoirekeuze valt terug op bestaand repertoire');
+const emptyBackup = validateBackup({ lines: [], repertoires: [] });
+equal(emptyBackup.lines.length, 0, 'lege maar geldige back-up kan worden hersteld');
+equal(emptyBackup.activeRepertoireId, '', 'lege back-up heeft geen actief repertoire');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
