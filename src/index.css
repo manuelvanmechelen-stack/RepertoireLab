@@ -1835,3 +1835,27 @@ textarea:focus-visible {
     width: 100%;
   }
 }
+
+
+/* Repertoire analytics, model games, and review polish */
+.repertoire-insights,.model-games{margin:18px 0;padding:18px;border:1px solid #34313f;border-radius:13px;background:linear-gradient(135deg,#1d1c26,#191a21 70%)}
+.insights-heading,.model-games-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.insights-heading h3{font:700 17px Manrope,sans-serif;margin:7px 0}
+.insights-heading p,.model-games>p{font-size:11px;line-height:1.6;color:#9e9eaf;margin:6px 0 0;max-width:650px}
+.insights-heading button{flex-shrink:0}
+.insights-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:17px}
+.insights-metrics>div{display:flex;flex-direction:column;gap:5px;padding:12px;background:#14151c;border:1px solid #30313b;border-radius:9px;min-width:0}
+.insights-metrics strong{font:700 20px Manrope,sans-serif;color:#d7ceff}
+.insights-metrics span{font-size:10px;line-height:1.4;color:#9293a3}
+.coverage-row code{display:block;margin-top:7px;font-size:9px;color:#9293a3;overflow-wrap:anywhere}
+.coverage-row>button{flex-shrink:0;font-size:10px;padding:8px}
+.model-games{padding:14px;margin:16px 0}
+.model-games-heading strong{font:700 12px Manrope,sans-serif}
+.model-game-row{display:flex;align-items:center;gap:11px;padding:10px 3px;border-top:1px solid #30313b;color:#e3e2ec;text-decoration:none}
+.model-game-row:first-of-type{margin-top:9px}
+.model-game-row:hover{color:#c7b8ff}
+.model-game-number{display:grid;place-items:center;flex-shrink:0;width:25px;height:25px;border-radius:7px;background:#302a41;color:#c9bbff;font-size:10px;font-weight:700}
+.model-game-players{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.model-game-players strong{font-size:10px;overflow-wrap:anywhere}
+.model-game-players small{font-size:9px;color:#8f90a0}
+@media(max-width:700px){.insights-heading{align-items:flex-start;flex-direction:column}.insights-metrics{grid-template-columns:1fr}.coverage-row{align-items:flex-start;flex-direction:column}.coverage-row>button{width:100%}.model-game-row{align-items:flex-start}}
