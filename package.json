@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node scripts/copy-stockfish.mjs",
-    "build": "vite build",
+    "build": "npm test && vite build",
     "preview": "vite preview",
     "test": "node scripts/test-repertoire.mjs"
   },
