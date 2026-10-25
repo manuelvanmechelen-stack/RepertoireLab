@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import {
@@ -1014,6 +1014,15 @@ function App() {
     : [];
   const moveList = game.history();
 
+  const lastExplorerRequestAt = useRef(0);
+
+  async function fetchExplorer(url: URL): Promise<Response> {
+    const waitMs = Math.max(0, 2500 - (Date.now() - lastExplorerRequestAt.current));
+    if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+    lastExplorerRequestAt.current = Date.now();
+    return fetch(url.toString(), { headers: explorerRequestHeaders() });
+  }
+
   function explorerRequestHeaders(): Record<string, string> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     const token = explorerToken.trim();
@@ -1032,12 +1041,12 @@ function App() {
   }
 
   async function checkRepertoireCoverage() {
-    if (coverageLoading) return;
+    if (coverageLoading || !repertoireLines.length) return;
     setCoverageLoading(true);
     setCoverage({});
     const results: Record<string, { games: number; error?: string }> = {};
     try {
-      for (const line of lines) {
+      for (const line of repertoireLines {
         const position = newGame(line.moves);
         const fen = position.fen();
         try {
@@ -1047,7 +1056,7 @@ function App() {
           url.searchParams.set('moves', '1');
           url.searchParams.set('topGames', '0');
           url.searchParams.set('recentGames', '0');
-          const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
+          const response = await fetchExplorer(url);
           if (!response.ok) throw new Error(explorerHttpError(response.status));
           const data = await response.json() as ExplorerResult;
           results[line.id] = { games: (data.white || 0) + (data.draws || 0) + (data.black || 0) };
@@ -1084,7 +1093,7 @@ function App() {
               url.searchParams.set('moves', '12');
               url.searchParams.set('topGames', '0');
               url.searchParams.set('recentGames', '0');
-              const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
+              const response = await fetchExplorer(url);
               if (response.ok) {
                 const data = await response.json() as ExplorerResult;
                 const total = (data.white || 0) + (data.draws || 0) + (data.black || 0);
@@ -1127,7 +1136,7 @@ function App() {
         url.searchParams.set('topGames', '0');
         url.searchParams.set('recentGames', '0');
         if (source === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
-        const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
+        const response = await fetchExplorer(url);
         if (!response.ok) throw new Error(explorerHttpError(response.status));
         return ((await response.json()) as ExplorerResult).moves ?? [];
       };
@@ -1626,7 +1635,7 @@ function App() {
       url.searchParams.set('topGames', '5');
       url.searchParams.set('recentGames', '0');
       if (explorerSource === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
-      const response = await fetch(url.toString(), { headers: explorerRequestHeaders() });
+      const response = await fetchExplorer(url);
       if (!response.ok) {
         throw new Error(explorerHttpError(response.status));
       }
@@ -1728,7 +1737,7 @@ function App() {
       explorerUrl.searchParams.set('topGames', '5');
       explorerUrl.searchParams.set('recentGames', '0');
       if (explorerSource === 'lichess' && ratingBand !== 'all') explorerUrl.searchParams.set('ratings', ratingBand);
-      const explorerResponse = await fetch(explorerUrl.toString(), { headers: explorerRequestHeaders() });
+      const explorerResponse = await fetchExplorer(explorerUrl);
       if (!explorerResponse.ok) {
         throw new Error(explorerHttpError(explorerResponse.status));
       }
@@ -2146,7 +2155,7 @@ function App() {
                   </label>
                   <div>
                     <p>Controleer hoe vaak de eindstelling van elke opgeslagen lijn voorkomt in de Lichess-masterdatabase. Als een stelling vaker voorkomt dan je doel, voeg dan meer zetten toe en controleer opnieuw. Het doel wordt op dit apparaat bewaard.</p>
-                    <button className="primary" onClick={checkRepertoireCoverage} disabled={coverageLoading}>{coverageLoading ? 'Database controleren…' : 'Controleer openingsdiepte'}</button>
+                    <button className="primary" onClick={checkRepertoireCoverage} disabled={coverageLoading || !repertoireLines.length}>{coverageLoading ? 'Database controleren…' : 'Controleer openingsdiepte'}</button>
                   </div>
                   <div>
                     <p>Controleer je eigen zetten in dit repertoire tegen masterpartijen. De controle vindt ongebruikelijke of onvoldoende onderbouwde zetten, maar vervangt geen engine-analyse.</p>
@@ -2168,9 +2177,9 @@ function App() {
                   </div>
                   <div className="coverage-results">
                     <div className="coverage-summary">
-                      {Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length} van {lines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} masterpartijen.
+                      {Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length} van {repertoireLines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} masterpartijen.
                     </div>
-                    {lines.filter(line => coverage[line.id]).map(line => {
+                    {repertoireLines.filter(line => coverage[line.id]).map(line => {
                       const result = coverage[line.id];
                       return (
                         <div className="coverage-row" key={line.id}>
