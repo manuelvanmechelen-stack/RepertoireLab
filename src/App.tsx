@@ -1214,6 +1214,58 @@ function App() {
     setNotice('PGN geëxporteerd met ' + repertoireLines.length + ' varianten.');
   }
 
+  function addExplorerMoveToRepertoire(san: string) {
+    if (!activeRepertoire) {
+      setNotice('Maak eerst een repertoire aan voordat je zetten toevoegt.');
+      return;
+    }
+    const candidate = cloneGame(game);
+    try {
+      candidate.move(san);
+    } catch {
+      setNotice('Deze zet is niet legaal in de huidige stelling.');
+      return;
+    }
+    const signature = candidate.history().join(' ');
+    const duplicate = repertoireLines.find(line => {
+      try { return newGame(line.moves).history().join(' ') === signature; } catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(candidate);
+      setNotice('Deze zetvolgorde staat al in je repertoire als “' + duplicate.name + '”.');
+      return;
+    }
+    const parentPrefix = game.history().join(' ');
+    const parentLine = repertoireLines
+      .filter(line => {
+        try {
+          const history = newGame(line.moves).history();
+          return history.length <= parentPrefix.split(' ').filter(Boolean).length &&
+            parentPrefix.startsWith(history.join(' ')) &&
+            history.join(' ') === parentPrefix;
+        } catch { return false; }
+      })
+      .sort((left, right) => right.moves.length - left.moves.length)[0];
+    const name = branchName.trim() || ((parentLine?.name ?? activeRepertoire.name) + ' — ' + san);
+    const line: Line = {
+      id: crypto.randomUUID(),
+      repertoireId: activeRepertoire.id,
+      name,
+      color: activeRepertoire.color,
+      moves: candidate.pgn(),
+      tags: ['Eigen variant', 'Repertoireboom'],
+      note: '',
+      due: 0,
+      seen: 0,
+    };
+    setLines(previous => [line, ...previous]);
+    setActive(line.id);
+    setGame(candidate);
+    setBranchName('');
+    setNotice('Zet ' + san + ' toegevoegd als variant aan ' + activeRepertoire.name + '.');
+  }
+
   function saveCurrentBranch() {
     const history = game.history();
     if (!history.length) { setNotice('Speel eerst minstens één zet voordat je een variant opslaat.'); return; }
@@ -2311,7 +2363,8 @@ function App() {
                             {recommendedMoves.map((move, index) => {
                               const total = move.total;
                               return (
-                                <button className="explorer-move" key={move.uci} onClick={() => playExplorerMove(move.san)}>
+                                <div className="explorer-move-row" key={move.uci}>
+                                <button className="explorer-move" onClick={() => playExplorerMove(move.san)}>
                                   <span className="explorer-move-san">{index === 0 ? '★ ' : ''}{move.san}{index === 0 ? ' · Beste match' : ''}</span>
                                   <span className="explorer-move-count">{total.toLocaleString('nl-NL')} partijen · score {Math.round(move.databaseScore * 100)}%{move.engineScore === undefined ? '' : ` · engine ${Math.round(move.engineScore * 100)}%`}</span>
                                   <span className="explorer-bar" aria-label="Wit wint, remise, zwart wint">
@@ -2320,6 +2373,13 @@ function App() {
                                     <i style={{ width: (total ? move.black / total * 100 : 0) + '%' }} />
                                   </span>
                                 </button>
+                                <button
+                                  className="add-explorer-move"
+                                  onClick={() => addExplorerMoveToRepertoire(move.san)}
+                                  disabled={!activeRepertoire}
+                                  title={activeRepertoire ? 'Voeg ' + move.san + ' toe als variant aan ' + activeRepertoire.name : 'Maak eerst een repertoire aan'}
+                                >+ Repertoire</button>
+                              </div>
                               );
                             })}
                           </div>
