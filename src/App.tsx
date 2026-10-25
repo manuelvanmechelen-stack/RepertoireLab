@@ -1924,14 +1924,20 @@ function App() {
                         </div>
                       </div>
                       <div className="branch-save-row">
-                        <input
+                        {!lines.length && (
+                          <select aria-label="Kleur van het repertoire" value={newColor} onChange={event => setNewColor(event.target.value as 'Wit' | 'Zwart')}>
+                            <option value="Wit">Repertoire voor wit</option>
+                            <option value="Zwart">Repertoire voor zwart</option>
+                          </select>
+                        )}
+<input
                           aria-label="Naam van nieuwe variant of vertakking"
                           value={branchName}
                           onChange={event => setBranchName(event.target.value)}
                           placeholder={lines.length ? "Naam nieuwe variant, bijv. Schots — 4...Nf6" : "Naam van je eerste variant"}
                         />
                         <button className="primary" onClick={saveCurrentBranch}>{lines.length ? 'Variant / vertakking opslaan' : 'Eerste variant opslaan'}</button>
-                        <button className="secondary" onClick={replaceCurrentLine}>Variant bijwerken</button>
+                        <button className="secondary" disabled={!lines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
                       <details className="move-tree-details">
                         <summary>Bekijk alle lijnen als zettenboom ({lines.length} varianten)</summary>
