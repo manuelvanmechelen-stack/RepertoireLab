@@ -854,6 +854,7 @@ function App() {
   const [activeRepertoireId, setActiveRepertoireId] = useState(() => localStorage.getItem('repertoirelab-active-repertoire-v1') ?? '');
   const [newRepertoireName, setNewRepertoireName] = useState('');
   const [editingRepertoireName, setEditingRepertoireName] = useState('');
+  const [editingVariantName, setEditingVariantName] = useState('');
 
   const [tab, setTab] = useState<'overzicht' | 'repertoire' | 'trainen'>(
     'overzicht'
@@ -1309,6 +1310,14 @@ function App() {
     setNewName('');
     setNewNote('');
     setNotice('Variant opgeslagen.');
+  }
+  function renameActiveVariant() {
+    if (!current || current.id === '__draft__') { setNotice('Selecteer eerst een opgeslagen variant.'); return; }
+    const name = editingVariantName.trim();
+    if (!name) { setNotice('Geef de variant een naam.'); return; }
+    setLines(previous => previous.map(line => line.id === current.id ? { ...line, name } : line));
+    setEditingVariantName('');
+    setNotice('Variant hernoemd.');
   }
   function deleteLine(id: string) {
     const next = lines.filter(line => line.id !== id);
@@ -2036,9 +2045,13 @@ function App() {
                 {current && (
                   <div className="study-panel">
                     <div className="panel-head">
-                      <div>
+                      <div className="study-panel-title">
                         <div className="eyebrow">STUDIEBORD</div>
                         <h2>{current.name}</h2>
+                        {current.id !== '__draft__' && <div className="repertoire-manage-row variant-rename-row">
+                          <input aria-label="Naam van variant wijzigen" value={editingVariantName} onChange={event => setEditingVariantName(event.target.value)} placeholder={current.name} />
+                          <button className="secondary" onClick={renameActiveVariant}>Hernoem variant</button>
+                        </div>}
                       </div>
                       <span
                         className={'color-tag ' + current.color.toLowerCase()}
