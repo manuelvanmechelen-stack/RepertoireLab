@@ -923,6 +923,7 @@ function App() {
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [qualityAudit, setQualityAudit] = useState<{ lineId: string; lineName: string; ply: number; san: string; severity: 'high' | 'medium'; message: string; games: number }[]>([]);
   const [qualityLoading, setQualityLoading] = useState(false);
+  const [qualityAuditDone, setQualityAuditDone] = useState(false);
   const [showTranspositions, setShowTranspositions] = useState(false);
   const [showModelGames, setShowModelGames] = useState(true);
 
@@ -1041,6 +1042,7 @@ function App() {
   async function auditRepertoireQuality() {
     if (qualityLoading || !repertoireLines.length) return;
     setQualityLoading(true);
+    setQualityAuditDone(false);
     setQualityAudit([]);
     const findings: { lineId: string; lineName: string; ply: number; san: string; severity: 'high' | 'medium'; message: string; games: number }[] = [];
     try {
@@ -1082,6 +1084,7 @@ function App() {
       }
     } finally {
       setQualityLoading(false);
+      setQualityAuditDone(true);
     }
   }
 
@@ -2124,6 +2127,7 @@ function App() {
                     <button className="secondary" onClick={auditRepertoireQuality} disabled={qualityLoading || !repertoireLines.length}>{qualityLoading ? 'Zetten controleren…' : 'Analyseer repertoirekwaliteit'}</button>
                   </div>
                 </div>
+                {qualityAuditDone && qualityAudit.length === 0 && <div className="coverage-summary">Geen databasewaarschuwingen gevonden voor de eigen zetten in dit repertoire. Dit is geen bewijs dat alle zetten engine-technisch optimaal zijn.</div>}
                 {qualityAudit.length > 0 && <section className="coverage-results">
                   <div className="coverage-summary"><strong>Kwaliteitscontrole:</strong> {qualityAudit.filter(item => item.severity === 'high').length} kritieke aandachtspunten en {qualityAudit.filter(item => item.severity === 'medium').length} zetten om nader te bekijken. Dit zijn databasewaarschuwingen, geen bewezen blunders.</div>
                   {qualityAudit.map((item, index) => <div className="coverage-row" key={item.lineId + '-' + item.ply + '-' + index}>
