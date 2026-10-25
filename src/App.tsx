@@ -822,12 +822,18 @@ function App() {
   const [lines, setLines] = useState<Line[]>(() => {
     try {
       const saved = localStorage.getItem('repertoirelab-lines-v1');
-      return saved ? (JSON.parse(saved) as Line[]) : seed;
+      const parsed = saved ? (JSON.parse(saved) as Line[]) : [];
+      // Remove bundled example lines from older versions; keep only user-created lines.
+      return parsed.filter(line =>
+        !['scotch', 'scotch-main', 'najdorf', 'sicilian', 'benoni'].includes(line.id) &&
+        !line.id.endsWith('-template') &&
+        !line.tags?.includes('Ingebouwde basislijn')
+      );
     } catch {
-      return seed;
+      return [];
     }
   });
-  const [active, setActive] = useState('scotch');
+  const [active, setActive] = useState('');
   const [tab, setTab] = useState<'overzicht' | 'repertoire' | 'trainen'>(
     'overzicht'
   );
@@ -838,10 +844,10 @@ function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState<'Wit' | 'Zwart'>('Wit');
-  const [newMoves, setNewMoves] = useState('1. e4 e5');
+  const [newMoves, setNewMoves] = useState('');
   const [newNote, setNewNote] = useState('');
   const [branchName, setBranchName] = useState('');
-  const [game, setGame] = useState(() => newGame(seed[0].moves));
+  const [game, setGame] = useState(() => newGame());
   const [fenInput, setFenInput] = useState('');
   const [selected, setSelected] = useState<Square | null>(null);
   const [notice, setNotice] = useState('');
@@ -877,14 +883,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
   }, [lines]);
-  useEffect(() => {
-    if (localStorage.getItem('repertoirelab-full-repertoire-v3') === 'installed') return;
-    setLines(previous => {
-      const existingIds = new Set(previous.map(line => line.id));
-      return [...previous, ...repertoireTemplates.filter(line => !existingIds.has(line.id))];
-    });
-    localStorage.setItem('repertoirelab-full-repertoire-v3', 'installed');
-  }, []);
   useEffect(() => {
     localStorage.setItem('repertoirelab-position-goal-v1', String(positionGoal));
   }, [positionGoal]);
@@ -940,19 +938,6 @@ function App() {
     ? game.moves({ square: selected, verbose: true }).map(move => move.to)
     : [];
   const moveList = game.history();
-
-  function addStarterRepertoire(color: 'Wit' | 'Zwart') {
-    const selectedTemplates = repertoireTemplates.filter(line => line.color === color);
-    const existingIds = new Set(lines.map(line => line.id));
-    const additions = selectedTemplates.filter(line => !existingIds.has(line.id));
-    if (!additions.length) {
-      setNotice(`Je repertoire voor ${color.toLowerCase()} bevat de ingebouwde basislijnen al.`);
-      return;
-    }
-    setLines(prev => [...prev, ...additions]);
-    setCoverage({});
-    setNotice(`${additions.length} basislijnen voor ${color.toLowerCase()} toegevoegd. Je kunt ze daarna verder uitbouwen.`);
-  }
 
   async function checkRepertoireCoverage() {
     if (coverageLoading) return;
@@ -1185,10 +1170,18 @@ function App() {
       return;
     }
     const candidate = newGame();
+    if (!newMoves.trim()) {
+      setNotice('Voer je eigen zetten in of importeer een PGN voordat je de variant opslaat.');
+      return;
+    }
     try {
       candidate.loadPgn(newMoves);
     } catch {
       setNotice('Controleer de PGN-notatie en probeer opnieuw.');
+      return;
+    }
+    if (!candidate.history().length) {
+      setNotice('De variant moet minstens één zet bevatten.');
       return;
     }
     const line: Line = {
@@ -1751,21 +1744,21 @@ function App() {
               <section className="repertoire-builder">
                 <div className="builder-heading">
                   <div>
-                    <div className="eyebrow">REPERTOIRE OPBOUWEN</div>
-                    <h2>Basisrepertoire voor wit en zwart</h2>
-                    <p>Voeg een samenhangende startset toe. De lijnen sluiten aan op het Schots voor wit en de Najdorf/Konings-Indisch voor zwart; je kunt ze later aanpassen of uitbreiden.</p>
+                    <div className="eyebrow">BOUW JE EIGEN REPERTOIRE</div>
+                    <h2>Begin met een lege werkruimte</h2>
+                    <p>Er zijn geen openingslijnen vooraf toegevoegd. Maak zelf een variant op het bord, importeer je eigen PGN of laat de database mogelijke zetten voorstellen. Je bepaalt zelf welke zetten in je repertoire komen.</p>
                   </div>
                 </div>
                 <div className="builder-actions">
                   <div className="builder-side">
-                    <strong>♔ Wit</strong>
-                    <span>Schots, Open Siciliaans, Frans, Caro-Kann en Pirc</span>
-                    <button className="secondary" onClick={() => addStarterRepertoire('Wit')}>Basisrepertoire wit toevoegen</button>
+                    <strong>1. Kies je kleur en startpositie</strong>
+                    <span>Maak een nieuwe variant of begin vanaf de beginstelling op het bord.</span>
+                    <button className="primary" onClick={() => { setNewMoves(''); setNewName(''); setShowAdd(true); }}>Eigen variant maken</button>
                   </div>
                   <div className="builder-side">
-                    <strong>♚ Zwart</strong>
-                    <span>Najdorf tegen 1.e4 en Konings-Indisch tegen andere eerste zetten</span>
-                    <button className="secondary" onClick={() => addStarterRepertoire('Zwart')}>Basisrepertoire zwart toevoegen</button>
+                    <strong>2. Bouw verder vanaf het bord</strong>
+                    <span>Speel zelf zetten, maak vertakkingen en sla alleen je eigen keuzes op.</span>
+                    <button className="secondary" onClick={() => { setGame(newGame()); setActive(''); setNotice('Beginstelling geladen. Speel zetten en gebruik daarna PGN import of maak een variant.'); }}>Beginstelling laden</button>
                   </div>
                 </div>
                 <div className="coverage-settings">
@@ -1894,8 +1887,12 @@ function App() {
                   ))}
                   {filtered.length === 0 && (
                     <div className="empty-state">
-                      Geen varianten gevonden. Pas je zoekopdracht aan of maak
-                      een nieuwe variant.
+                      Je repertoire is nog leeg. Maak zelf de eerste variant of importeer je eigen PGN. Er worden geen openingslijnen automatisch vooraf ingevuld.
+                      <div style={{ marginTop: 12 }}>
+                        <button className="primary" onClick={() => { setNewMoves(''); setNewName(''); setShowAdd(true); }}>
+                          <Plus size={16} /> Eerste variant maken
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
