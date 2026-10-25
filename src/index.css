@@ -1895,3 +1895,13 @@ textarea:focus-visible {
 
 /* Tree management and adjustable local engine analysis */
 .analysis-depth-label{display:flex;align-items:center;gap:8px;color:#a7a5b7;font-size:11px}.analysis-depth-label select{min-width:120px;background:#191821;color:#e8e5f2;border:1px solid #403c4d;border-radius:8px;padding:9px}.danger{border:1px solid #6d343c;background:#2a191d;color:#ffb9c0;border-radius:8px;padding:9px 12px;cursor:pointer}.danger:hover{background:#3a2026}.repertoire-tree-panel .danger{margin-left:6px}
+
+/* Optional cloud backup panel */
+.cloud-sync-panel .builder-side{gap:12px}
+.cloud-config-warning{padding:12px;border:1px solid #715a2d;background:#292317;color:#f1d49a;border-radius:9px;font-size:12px;line-height:1.6}
+.cloud-auth-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:620px}
+.cloud-auth-fields input{min-width:0;background:#191a22;color:#eceaf5;border:1px solid #3a3b49;border-radius:8px;padding:11px}
+.cloud-auth-fields .move-entry-actions{grid-column:1/-1}
+.cloud-signed-in{display:flex;flex-direction:column;gap:10px}
+.cloud-signed-in>span,.cloud-sync-message{color:#c6c4d4;font-size:12px}
+@media(max-width:600px){.cloud-auth-fields{grid-template-columns:minmax(0,1fr)}.cloud-auth-fields .move-entry-actions{grid-column:auto}.cloud-signed-in .move-entry-actions,.cloud-auth-fields .move-entry-actions{flex-wrap:wrap}.cloud-signed-in .move-entry-actions button,.cloud-auth-fields .move-entry-actions button{flex:1 1 140px}}
