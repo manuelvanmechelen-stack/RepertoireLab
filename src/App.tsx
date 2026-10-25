@@ -1594,6 +1594,7 @@ function App() {
   }
   function trainResult(remembered: boolean) {
     if (!review) return;
+    if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
     const nextSeen = review.seen + 1;
     const previousInterval = review.intervalDays ?? 0;
     const intervalDays = remembered
@@ -2859,9 +2860,9 @@ function App() {
                     <div className="training-symbol">♞</div>
                     <h2>{review.name}</h2>
                     <p className="training-prompt">
-                      Kun je de zetten en het belangrijkste plan uit deze
-                      variant terughalen?
+                      Probeer de zettenreeks hardop of op een bord na te spelen. Noteer voor jezelf ook het plan en de belangrijkste reactie van je tegenstander.
                     </p>
+                    <div className="coverage-summary"><strong>Herinneringsdoel</strong><br />Noem de openingszetten in volgorde, leg één strategisch idee uit en bedenk welke tegenzet je repertoire het meest test.</div>
                     {revealed && (
                       <div className="answer-box">
                         <div className="answer-label">ZETTEN</div>
