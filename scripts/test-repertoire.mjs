@@ -191,9 +191,9 @@ equal(selectDueOwnPly(6, 'Zwart', { 'x:1': { due: fixedNow - 1 } }, 'x', fixedNo
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow - 1, fixedNow), 0, 'verlopen hele variant start vanaf begin');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen vervallen zet valt terug op beginstelling');
 
-const gameOne = '[Event "Game one"]\\n\\n1. e4 e5 2. Nf3 Nc6 1-0';
-const gameTwo = '[Event "Game two"]\\n[Site "Club"]\\n\\n1. d4 d5 0-1';
-const collection = splitPgnCollection(gameOne + '\\n\\n' + gameTwo);
+const gameOne = '[Event "Game one"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
+const gameTwo = '[Event "Game two"]\n[Site "Club"]\n\n1. d4 d5 0-1';
+const collection = splitPgnCollection(gameOne + '\n\n' + gameTwo);
 equal(collection.length, 2, 'PGN-verzameling wordt op Event-header gesplitst');
 check(collection[0].includes('Game one') && collection[1].includes('Game two'), 'splitsen behoudt partijvolgorde en headers');
 equal(splitPgnCollection('   ').length, 0, 'lege PGN levert geen partijen op');
