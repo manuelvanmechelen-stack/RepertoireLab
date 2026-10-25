@@ -2477,7 +2477,7 @@ function App() {
                                 <div className="explorer-move-row" key={move.uci}>
                                 <button className="explorer-move" onClick={() => playExplorerMove(move.san)}>
                                   <span className="explorer-move-san">{index === 0 ? '★ ' : ''}{move.san}{index === 0 ? ' · Beste match' : ''}</span>
-                                  <span className="explorer-move-count">{total.toLocaleString('nl-NL')} partijen · score {Math.round(move.databaseScore * 100)}%{move.engineScore === undefined ? '' : ` · engine ${Math.round(move.engineScore * 100)}%`}</span>
+                                  <span className="explorer-move-count">{total.toLocaleString('nl-NL')} partijen · {Math.round(recommendedMoves.reduce((sum, item) => sum + item.total, 0) ? total / recommendedMoves.reduce((sum, item) => sum + item.total, 0) * 100 : 0)}% van de zetten · database {Math.round(move.databaseScore * 100)}%{move.engineScore === undefined ? '' : ` · engine ${Math.round(move.engineScore * 100)}%`}</span>
                                   <span className="explorer-bar" aria-label="Wit wint, remise, zwart wint">
                                     <i style={{ width: (total ? move.white / total * 100 : 0) + '%' }} />
                                     <i style={{ width: (total ? move.draws / total * 100 : 0) + '%' }} />
