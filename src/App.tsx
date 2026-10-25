@@ -3,6 +3,7 @@ import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleMoveResult, scheduleLineResult, selectDueOwnPly } from './study/scheduling.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
+import { validateBackup } from './study/backup.mjs';
 import {
   BarChart3,
   BookOpen,
@@ -858,9 +859,6 @@ function parseStrictPgn(pgn: string): Chess {
   return game;
 }
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
 
 function App() {
   const [lines, setLines] = useState<Line[]>(() => {
@@ -1662,42 +1660,11 @@ function App() {
     if (!file) return;
     try {
       const raw: unknown = JSON.parse(await file.text());
-      if (!isPlainRecord(raw) || !Array.isArray(raw.lines)) throw new Error('Dit bestand is geen geldige RepertoireLab-back-up.');
-      const parsed = raw as { lines: unknown[]; repertoires?: unknown; activeRepertoireId?: unknown; missedMoves?: unknown; moveMemory?: unknown };
-      const lineIds = new Set<string>();
-      const nextLines: Line[] = parsed.lines.map((item, index) => {
-        if (!isPlainRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
-            typeof item.moves !== 'string' || !['Wit', 'Zwart'].includes(String(item.color)) ||
-            !Array.isArray(item.tags) || !item.tags.every(tag => typeof tag === 'string') || typeof item.note !== 'string') {
-          throw new Error('Variant ' + (index + 1) + ' heeft ongeldige gegevens. Er is niets gewijzigd.');
-        }
-        if (lineIds.has(item.id)) throw new Error('Dubbel variant-ID gevonden: ' + item.id + '. Er is niets gewijzigd.');
-        lineIds.add(item.id);
-        try { parseStrictPgn(item.moves); } catch { throw new Error('Ongeldige of lege zetten in variant: ' + item.name + '. Er is niets gewijzigd.'); }
-        return { id: item.id, name: item.name, moves: item.moves, color: item.color as 'Wit' | 'Zwart',
-          tags: item.tags as string[], note: item.note, repertoireId: typeof item.repertoireId === 'string' ? item.repertoireId : undefined,
-          due: Number.isFinite(item.due) ? Number(item.due) : 0, seen: Number.isFinite(item.seen) ? Number(item.seen) : 0,
-          intervalDays: Number.isFinite(item.intervalDays) ? Number(item.intervalDays) : undefined };
-      });
-      const rawReps = Array.isArray(parsed.repertoires) ? parsed.repertoires : [];
-      const repIds = new Set<string>();
-      const nextReps: Repertoire[] = rawReps.map((item, index) => {
-        if (!isPlainRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
-            !['Wit', 'Zwart'].includes(String(item.color))) throw new Error('Repertoire ' + (index + 1) + ' heeft ongeldige gegevens. Er is niets gewijzigd.');
-        if (repIds.has(item.id)) throw new Error('Dubbel repertoire-ID gevonden: ' + item.id + '. Er is niets gewijzigd.');
-        repIds.add(item.id);
-        return { id: item.id, name: item.name, color: item.color as 'Wit' | 'Zwart', createdAt: Number.isFinite(item.createdAt) ? Number(item.createdAt) : Date.now() };
-      });
-      const validCounterMap = (value: unknown): value is Record<string, number> => isPlainRecord(value) &&
-        Object.entries(value).every(([key, count]) => key.length > 0 && typeof count === 'number' && Number.isFinite(count) && count >= 0);
-      const validMemoryMap = (value: unknown): value is typeof moveMemory => isPlainRecord(value) &&
-        Object.entries(value).every(([key, entry]) => key.length > 0 && isPlainRecord(entry) &&
-          Number.isFinite(entry.seen) && Number(entry.seen) >= 0 && Number.isFinite(entry.misses) && Number(entry.misses) >= 0 &&
-          Number.isFinite(entry.due) && Number(entry.due) >= 0 && Number.isFinite(entry.intervalDays) && Number(entry.intervalDays) >= 0 &&
-          (entry.lastResult === undefined || entry.lastResult === 'good' || entry.lastResult === 'miss'));
-      if (parsed.missedMoves !== undefined && !validCounterMap(parsed.missedMoves)) throw new Error('De foutenteller in deze back-up is ongeldig.');
-      if (parsed.moveMemory !== undefined && !validMemoryMap(parsed.moveMemory)) throw new Error('De herhalingsgegevens in deze back-up zijn ongeldig.');
+      const validated = validateBackup(raw);
       if (!window.confirm('De huidige gegevens vervangen door deze back-up? Exporteer eerst een back-up om gegevens te bewaren.')) return;
+      setLines(validated.lines); setRepertoires(validated.repertoires); setActiveRepertoireId(validated.activeRepertoireId);
+      setMissedMoves(validated.missedMoves); setMoveMemory(validated.moveMemory);
+      setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up volledig gecontroleerd en teruggezet.');
       const chosenRepertoire = typeof parsed.activeRepertoireId === 'string' && nextReps.some(item => item.id === parsed.activeRepertoireId)
         ? parsed.activeRepertoireId : nextReps[0]?.id ?? '';
       setLines(nextLines); setRepertoires(nextReps); setActiveRepertoireId(chosenRepertoire);
