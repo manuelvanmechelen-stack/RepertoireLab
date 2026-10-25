@@ -953,6 +953,7 @@ function App() {
   const [trainingEval, setTrainingEval] = useState<CloudEval | null>(null);
   const [trainingEvalLoading, setTrainingEvalLoading] = useState(false);
   const [trainingEvalError, setTrainingEvalError] = useState('');
+  const [trainingAnalysisDepth, setTrainingAnalysisDepth] = useState(16);
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -1702,7 +1703,7 @@ function App() {
   async function analyzeTrainingPosition() {
     if (trainingEvalLoading) return;
     setTrainingEvalLoading(true); setTrainingEvalError(''); setTrainingEval(null);
-    try { const result = await runLocalStockfish(trainingBoardFen === 'start' ? new Chess().fen() : trainingBoardFen); setTrainingEval(result); }
+    try { const result = await runLocalStockfish(trainingBoardFen === 'start' ? new Chess().fen() : trainingBoardFen, trainingAnalysisDepth); setTrainingEval(result); }
     catch (error) { setTrainingEvalError(error instanceof Error ? error.message : 'Analyse mislukt.'); }
     finally { setTrainingEvalLoading(false); }
   }
@@ -1795,7 +1796,7 @@ function App() {
     }
   }
 
-  async function runLocalStockfish(requestedFen: string): Promise<CloudEval> {
+  async function runLocalStockfish(requestedFen: string, requestedDepth = 16): Promise<CloudEval> {
     return new Promise((resolve, reject) => {
       let worker: Worker;
       try {
@@ -1828,7 +1829,7 @@ function App() {
         }
         if (line === 'readyok') {
           worker.postMessage('position fen ' + requestedFen);
-          worker.postMessage('go depth 14');
+          worker.postMessage('go depth ' + Math.max(10, Math.min(24, Math.round(requestedDepth))));
           return;
         }
         if (line.startsWith('info ')) {
@@ -2489,6 +2490,7 @@ function App() {
                         {current.id !== '__draft__' && <div className="repertoire-manage-row variant-rename-row">
                           <input aria-label="Naam van variant wijzigen" value={editingVariantName} onChange={event => setEditingVariantName(event.target.value)} placeholder={current.name} />
                           <button className="secondary" onClick={renameActiveVariant}>Hernoem variant</button>
+                          <button className="danger" onClick={() => { if (current && window.confirm('Variant “' + current.name + '” verwijderen? Dit kan niet ongedaan worden gemaakt.')) deleteLine(current.id); }}>Verwijder variant</button>
                         </div>}
                       </div>
                       <span
@@ -3044,7 +3046,7 @@ function App() {
                       Probeer de zettenreeks hardop of op een bord na te spelen. Noteer voor jezelf ook het plan en de belangrijkste reactie van je tegenstander.
                     </p>
                     <div className="coverage-summary"><strong>Herinneringsdoel</strong><br />Noem de openingszetten in volgorde, leg één strategisch idee uit en bedenk welke tegenzet je repertoire het meest test.</div>
-                    <section className="move-entry-panel board-training-panel"><div className="eyebrow">INTERACTIEVE ZETTRAINING</div><p><strong>Speel de repertoirezetten op het bord.</strong> Tegenstanderszetten worden automatisch afgespeeld. Verkeerde zetten worden bijgehouden en krijgen een korte herhaaltermijn.</p>{(() => { let tg: Chess; try { tg = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); } catch { tg = new Chess(); } const ranks = trainingBoardFlip ? ['1','2','3','4','5','6','7','8'] : ['8','7','6','5','4','3','2','1']; const files = trainingBoardFlip ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h']; const glyph: Record<string,string> = {wp:'♙',wn:'♘',wb:'♗',wr:'♖',wq:'♕',wk:'♔',bp:'♟',bn:'♞',bb:'♝',br:'♜',bq:'♛',bk:'♚'}; const targets = trainingSelected ? tg.moves({square:trainingSelected,verbose:true}).map(m=>m.to) : []; return <><div className="training-interactive-board" role="group" aria-label="Zettraining schaakbord">{ranks.flatMap(rank => files.map(file => (file+rank) as Square)).map((sq,index) => { const p=tg.get(sq); return <button type="button" key={sq} aria-label={sq} disabled={trainingComplete} className={'training-square '+((Math.floor(index/8)+index%8)%2?'dark':'light')+(trainingSelected===sq?' selected':'')+(targets.includes(sq)?' legal-target':'')} onClick={() => handleTrainingSquare(sq)}>{p?glyph[p.color+p.type]:targets.includes(sq)?'·':''}</button>; })}</div><div className="move-entry-actions"><button className="secondary" onClick={() => setTrainingBoardFlip(v=>!v)}>Draai bord</button><button className="secondary" onClick={() => prepareBoardTraining(review)}>Herstart training</button></div><p className="training-feedback" role="status">{trainingFeedback}</p><div className="move-entry-actions"><button className="secondary" onClick={() => void analyzeTrainingPosition()} disabled={trainingEvalLoading}>{trainingEvalLoading?'Stockfish analyseert…':'Analyseer deze stelling'}</button></div>{trainingEval && <div className="training-engine-result"><strong>Stockfish · diepte {trainingEval.depth}</strong>{trainingEval.pvs.slice(0,3).map((pv,i)=><p key={i}><b>{pv.mate!==undefined?'Mat in '+pv.mate:( ((pv.cp??0)/100).toFixed(2)+' pionnen')}</b> — {formatPv(pv.moves)}</p>)}</div>}{trainingEvalError && <p className="training-feedback" role="status">{trainingEvalError}</p>}<small>{trainingComplete?'Variant voltooid':('Zet '+(trainingPly+1)+' · '+(tg.turn()==='w'?'Wit':'Zwart')+' aan zet')} · Individuele zetten in geheugen: {Object.keys(moveMemory).filter(k=>k.startsWith(review.id+':')).length}</small></>; })()}</section>
+                    <section className="move-entry-panel board-training-panel"><div className="eyebrow">INTERACTIEVE ZETTRAINING</div><p><strong>Speel de repertoirezetten op het bord.</strong> Tegenstanderszetten worden automatisch afgespeeld. Verkeerde zetten worden bijgehouden en krijgen een korte herhaaltermijn.</p>{(() => { let tg: Chess; try { tg = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); } catch { tg = new Chess(); } const ranks = trainingBoardFlip ? ['1','2','3','4','5','6','7','8'] : ['8','7','6','5','4','3','2','1']; const files = trainingBoardFlip ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h']; const glyph: Record<string,string> = {wp:'♙',wn:'♘',wb:'♗',wr:'♖',wq:'♕',wk:'♔',bp:'♟',bn:'♞',bb:'♝',br:'♜',bq:'♛',bk:'♚'}; const targets = trainingSelected ? tg.moves({square:trainingSelected,verbose:true}).map(m=>m.to) : []; return <><div className="training-interactive-board" role="group" aria-label="Zettraining schaakbord">{ranks.flatMap(rank => files.map(file => (file+rank) as Square)).map((sq,index) => { const p=tg.get(sq); return <button type="button" key={sq} aria-label={sq} disabled={trainingComplete} className={'training-square '+((Math.floor(index/8)+index%8)%2?'dark':'light')+(trainingSelected===sq?' selected':'')+(targets.includes(sq)?' legal-target':'')} onClick={() => handleTrainingSquare(sq)}>{p?glyph[p.color+p.type]:targets.includes(sq)?'·':''}</button>; })}</div><div className="move-entry-actions"><button className="secondary" onClick={() => setTrainingBoardFlip(v=>!v)}>Draai bord</button><button className="secondary" onClick={() => prepareBoardTraining(review)}>Herstart training</button></div><p className="training-feedback" role="status">{trainingFeedback}</p><div className="move-entry-actions"><label className="analysis-depth-label">Analyserdiepte <select aria-label="Stockfish analysediepte" value={trainingAnalysisDepth} onChange={event => setTrainingAnalysisDepth(Number(event.target.value))} disabled={trainingEvalLoading}><option value={12}>Snel · 12</option><option value={16}>Normaal · 16</option><option value={20}>Diep · 20</option><option value={24}>Zeer diep · 24</option></select></label><button className="secondary" onClick={() => void analyzeTrainingPosition()} disabled={trainingEvalLoading}>{trainingEvalLoading?'Stockfish analyseert…':'Analyseer deze stelling'}</button></div>{trainingEval && <div className="training-engine-result"><strong>Stockfish · diepte {trainingEval.depth}</strong>{trainingEval.pvs.slice(0,3).map((pv,i)=><p key={i}><b>{pv.mate!==undefined?'Mat in '+pv.mate:( ((pv.cp??0)/100).toFixed(2)+' pionnen')}</b> — {formatPv(pv.moves)}</p>)}</div>}{trainingEvalError && <p className="training-feedback" role="status">{trainingEvalError}</p>}<small>{trainingComplete?'Variant voltooid':('Zet '+(trainingPly+1)+' · '+(tg.turn()==='w'?'Wit':'Zwart')+' aan zet')} · Individuele zetten in geheugen: {Object.keys(moveMemory).filter(k=>k.startsWith(review.id+':')).length}</small></>; })()}</section>
                     {revealed && (
                       <div className="answer-box">
                         <div className="answer-label">ZETTEN</div>
