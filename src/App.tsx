@@ -1240,7 +1240,7 @@ function App() {
   }
   function clickSquare(square: Square) {
     if (selected && legalTargets.includes(square)) {
-      const copy = new Chess(game.fen());
+      const copy = cloneGame(game);
       try {
         copy.move({ from: selected, to: square, promotion: 'q' });
         setGame(copy);
@@ -1861,7 +1861,17 @@ function App() {
                       {repertoires.map(item => <option key={item.id} value={item.id}>{item.name} ({item.color})</option>)}
                     </select>
                     <span>{activeRepertoire ? repertoireLines.length + ' varianten in ' + activeRepertoire.name : 'Maak of selecteer eerst een repertoire.'}</span>
-                    {activeRepertoire && <button className="primary" onClick={() => { setGame(newGame()); setActive(''); setBranchName(''); setSelected(null); setNewColor(activeRepertoire.color); setNotice('Nieuwe variant: speel de zetten op het bord en sla ze hierboven op.'); }}><Plus size={16} /> Variant toevoegen</button>}
+                    {activeRepertoire && <>
+                      <div className="repertoire-manage-row">
+                        <input aria-label="Nieuwe naam voor repertoire" value={editingRepertoireName} onChange={event => setEditingRepertoireName(event.target.value)} placeholder={activeRepertoire.name} />
+                        <button className="secondary" onClick={renameActiveRepertoire}>Naam wijzigen</button>
+                      </div>
+                      <div className="repertoire-manage-row">
+                        <button className="secondary" onClick={exportActiveRepertoirePgn} disabled={!repertoireLines.length}><Download size={15} /> Exporteer PGN</button>
+                        <button className="danger-button" onClick={() => { if (window.confirm('Verwijder repertoire “' + activeRepertoire.name + '” en alle varianten?')) deleteActiveRepertoire(); }}><Trash2 size={15} /> Verwijder repertoire</button>
+                      </div>
+                      <button className="primary" onClick={() => { setGame(newGame()); setActive(''); setBranchName(''); setSelected(null); setNewColor(activeRepertoire.color); setNotice('Nieuwe variant: speel de zetten op het bord en sla ze hierboven op.'); }}><Plus size={16} /> Variant toevoegen</button>
+                    </>}
                   </div>
                 </div>
               </section>
@@ -2162,7 +2172,7 @@ function App() {
                       </button>
                       <button
                         onClick={() => {
-                          const copy = new Chess(game.fen());
+                          const copy = cloneGame(game);
                           copy.undo();
                           setGame(copy);
                           setSelected(null);
