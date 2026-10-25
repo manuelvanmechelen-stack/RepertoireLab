@@ -1696,3 +1696,50 @@ textarea:focus-visible {
 .builder-import-heading span { font-size: 12px; line-height: 1.5; color: #aaaabd; }
 .builder-import-panel .secondary { justify-self: start; }
 .modal textarea { width: 100%; resize: vertical; }
+
+
+/* Repertoire management controls */
+.repertoire-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 8px 0;
+}
+.repertoire-manage-row input {
+  min-width: 0;
+  flex: 1;
+}
+.repertoire-manage-row button {
+  flex-shrink: 0;
+}
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #63383e;
+  background: #301e24;
+  color: #ffb8bf;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.danger-button:hover {
+  background: #48262d;
+}
+.danger-button:disabled,
+.secondary:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+@media (max-width: 560px) {
+  .repertoire-manage-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .repertoire-manage-row button {
+    width: 100%;
+  }
+}
