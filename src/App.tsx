@@ -906,6 +906,9 @@ function App() {
   const [gameUsername, setGameUsername] = useState('');
   const [gameReviewLoading, setGameReviewLoading] = useState(false);
   const [gameReview, setGameReview] = useState<string[]>([]);
+  const [chessComUsername, setChessComUsername] = useState('');
+  const [chessComReviewLoading, setChessComReviewLoading] = useState(false);
+  const [chessComReview, setChessComReview] = useState<string[]>([]);
   const [moveInput, setMoveInput] = useState('');
   const [evalResult, setEvalResult] = useState<CloudEval | null>(null);
   const [evalLoading, setEvalLoading] = useState(false);
@@ -1152,6 +1155,48 @@ function App() {
       setGameReview([error instanceof Error ? error.message : 'Partijen konden niet worden gecontroleerd.']);
     } finally {
       setGameReviewLoading(false);
+    }
+  }
+
+  async function reviewChessComGames() {
+    const username = chessComUsername.trim();
+    if (!username || chessComReviewLoading) return;
+    setChessComReviewLoading(true);
+    setChessComReview([]);
+    try {
+      const archivesResponse = await fetch('https://api.chess.com/pub/player/' + encodeURIComponent(username.toLowerCase()) + '/games/archives');
+      if (!archivesResponse.ok) throw new Error(archivesResponse.status === 404 ? 'Chess.com-gebruiker niet gevonden.' : 'Chess.com gaf fout ' + archivesResponse.status + '.');
+      const archiveData = await archivesResponse.json() as { archives?: string[] };
+      const archive = archiveData.archives?.[archiveData.archives.length - 1];
+      if (!archive) throw new Error('Geen openbare partijen gevonden.');
+      const gamesResponse = await fetch(archive);
+      if (!gamesResponse.ok) throw new Error('De Chess.com-partijen konden niet worden opgehaald.');
+      const gamesData = await gamesResponse.json() as { games?: Array<{ pgn?: string; end_time?: number; white?: { username?: string }; black?: { username?: string } }> };
+      const report: string[] = [];
+      const recent = [...(gamesData.games ?? [])].sort((a, b) => (b.end_time ?? 0) - (a.end_time ?? 0)).slice(0, 25);
+      for (const item of recent) {
+        if (!item.pgn) continue;
+        const parsed = new Chess();
+        try { parsed.loadPgn(item.pgn); } catch { continue; }
+        const history = parsed.history();
+        if (!history.length) continue;
+        let bestMatch: { name: string; length: number } | null = null;
+        for (const line of lines) {
+          const lineMoves = newGame(line.moves).history();
+          let shared = 0;
+          while (shared < Math.min(history.length, lineMoves.length) && history[shared] === lineMoves[shared]) shared++;
+          if (shared >= 4 && (!bestMatch || shared > bestMatch.length)) bestMatch = { name: line.name, length: shared };
+        }
+        const headers = parsed.header();
+        const date = headers.Date && headers.Date !== '????.??.??' ? headers.Date : 'datum onbekend';
+        report.push(date + ' · ' + (headers.White ?? item.white?.username ?? 'Wit') + ' – ' + (headers.Black ?? item.black?.username ?? 'Zwart') + ' (' + (headers.Result ?? '*') + '): ' +
+          (bestMatch ? 'repertoire gevolgd tot ply ' + bestMatch.length + ' — ' + bestMatch.name : 'geen directe match met opgeslagen lijnen; controleer de openingsafwijking'));
+      }
+      setChessComReview(report.length ? report : ['Geen leesbare partijen in het meest recente openbare maandarchief.']);
+    } catch (error) {
+      setChessComReview([error instanceof Error ? error.message : 'Chess.com-partijen konden niet worden gecontroleerd.']);
+    } finally {
+      setChessComReviewLoading(false);
     }
   }
 
@@ -2062,6 +2107,11 @@ function App() {
                     <button className="primary" onClick={reviewLichessGames} disabled={gameReviewLoading || !gameUsername.trim()}>{gameReviewLoading ? 'Partijen controleren…' : 'Controleer partijen'}</button>
                   </div>
                   {gameReview.length > 0 && <div className="coverage-results">{gameReview.map((item, index) => <div className="coverage-row" key={index}><span>{item}</span></div>)}</div>}
+                  <div className="game-review-controls chesscom-review-controls">
+                    <input aria-label="Chess.com-gebruikersnaam" value={chessComUsername} onChange={event => setChessComUsername(event.target.value)} placeholder="Chess.com-gebruikersnaam" />
+                    <button className="secondary" onClick={reviewChessComGames} disabled={chessComReviewLoading || !chessComUsername.trim()}>{chessComReviewLoading ? 'Partijen controleren…' : 'Controleer Chess.com'}</button>
+                  </div>
+                  {chessComReview.length > 0 && <div className="coverage-results">{chessComReview.map((item, index) => <div className="coverage-row" key={index}><span>{item}</span></div>)}</div>}
                 </div>
               </section>
               <div className="toolbar">
