@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
+import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import {
   BarChart3,
   BookOpen,
@@ -1006,8 +1007,14 @@ function App() {
       };
       const firstMoves = await fetchMoves(root);
       if (!firstMoves.length) throw new Error('Geen veelgespeelde zetten gevonden voor deze stelling.');
+      // BookBuilder-style move selection: rank by confidence-aware results and popularity,
+      // from the perspective of the side whose repertoire is being built.
+      const perspective = root.turn() === 'w' ? 'white' : 'black';
+      const rankedFirstMoves = rankBookBuilderCandidates(firstMoves, perspective)
+        .map(move => firstMoves.find(candidate => candidate.san === move.san)!)
+        .filter(Boolean);
       const additions: Line[] = [];
-      for (const first of firstMoves.slice(0, 5)) {
+      for (const first of rankedFirstMoves.slice(0, 5)) {
         const afterFirst = new Chess(root.fen());
         afterFirst.move(first.san);
         let replies: ExplorerMove[] = [];
@@ -1027,7 +1034,7 @@ function App() {
             color: current?.color ?? 'Wit',
             moves: branch.pgn(),
             tags: [...(current?.tags ?? []), 'Automatisch aangevuld'],
-            note: 'Automatisch voorgestelde lijn op basis van veelgespeelde reacties. Controleer de zetkeuze en voeg eigen plannen toe.',
+            note: 'Voorgesteld met BookBuilder-stijl rangschikking op basis van Lichess-partijresultaten, steekproefgrootte en populariteit. Zetlegaliteit is door chess.js gecontroleerd; beoordeel de variant en engine-evaluatie zelf.',
             due: 0,
             seen: 0,
           });
