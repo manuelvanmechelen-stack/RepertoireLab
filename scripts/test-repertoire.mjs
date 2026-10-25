@@ -61,7 +61,7 @@ check(castle.fen().includes('KQkq') === false, 'rokade-rechten moeten na rokade 
 const ep = gameFromPgn('1. e4 a6 2. e5 d5');
 check(ep.moves({ square: 'e5' }).includes('exd6'), 'en-passant-slag moet legaal zijn');
 play(ep, 'exd6');
-equal(ep.get('d5'), null, 'en-passant moet de geslagen pion verwijderen');
+equal(ep.get('d5'), undefined, 'en-passant moet de geslagen pion verwijderen');
 
 const promotion = new Chess('8/P7/8/8/8/8/7k/7K w - - 0 1');
 check(promotion.moves({ square: 'a7' }).some(m => m.startsWith('a8=')), 'promotiezetten moeten worden gegenereerd');
@@ -147,12 +147,12 @@ check(!('lines' in JSON.parse('{}')), 'lege JSON is geen geldige back-up');
 check(!Array.isArray(restoredBackup.lines) || restoredBackup.lines.every(line => typeof line.id === 'string' && typeof line.moves === 'string'), 'back-upregels hebben vereiste velden');
 
 // 9. State consistency guards: empty variants, broken FEN, and turn ownership.
-throws(() => gameFromPgn(''), 'lege PGN levert geen spel met zetten op'); // parser may accept empty; checked below separately if applicable
+check(gameFromPgn('').history().length === 0, 'lege PGN mag geen zetten opleveren');
 const empty = new Chess();
 equal(empty.history().length, 0, 'lege beginstelling bevat geen gespeelde zetten');
 equal(empty.turn(), 'w', 'beginstelling begint met wit');
 check(new Chess().moves().includes('e4'), 'beginstelling biedt e4 aan');
 check(!new Chess().moves().includes('e5'), 'beginstelling biedt geen zwarte zet aan wit');
-equal(new Chess('start').fen(), new Chess().fen(), 'test sanity: startpositie is de standaardpositie');
+equal(new Chess().fen(), 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'begin-FEN moet exact kloppen');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
