@@ -849,6 +849,25 @@ function analyzeTranspositions(lines: Line[]) {
     .map(([fen, item]) => ({ fen, paths: item.histories.size, names: [...item.names], ply: item.ply }))
     .sort((a, b) => b.names.length - a.names.length || a.ply - b.ply).slice(0, 20);
 }
+function splitPgnCollection(input: string): string[] {
+  const trimmed = input.trim();
+  if (!trimmed) return [];
+  // A PGN collection conventionally starts each game with an Event header.
+  const chunks = trimmed.split(/(?=^\\s*\\[Event\\s+")/m).map(chunk => chunk.trim()).filter(Boolean);
+  return chunks.length ? chunks : [trimmed];
+}
+
+function parseStrictPgn(pgn: string): Chess {
+  const game = new Chess();
+  game.loadPgn(pgn);
+  if (game.history().length === 0) throw new Error('De PGN bevat geen zetten.');
+  return game;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function App() {
   const [lines, setLines] = useState<Line[]>(() => {
     try {
@@ -1648,14 +1667,49 @@ function App() {
   async function restoreBackup(file?: File) {
     if (!file) return;
     try {
-      const parsed = JSON.parse(await file.text()) as { lines?: Line[]; repertoires?: Repertoire[]; activeRepertoireId?: string; missedMoves?: Record<string, number>; moveMemory?: typeof moveMemory };
-      if (!Array.isArray(parsed.lines) || parsed.lines.some(line => !line || typeof line.id !== 'string' || typeof line.moves !== 'string' || !['Wit','Zwart'].includes(line.color))) throw new Error('De variantenlijst is ongeldig.');
-      for (const line of parsed.lines) { try { newGame(line.moves); } catch { throw new Error('Ongeldige zetten in variant: ' + line.name + '. Er is niets gewijzigd.'); } }
-      const nextReps = Array.isArray(parsed.repertoires) ? parsed.repertoires.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string' && ['Wit','Zwart'].includes(item.color)) : [];
+      const raw: unknown = JSON.parse(await file.text());
+      if (!isPlainRecord(raw) || !Array.isArray(raw.lines)) throw new Error('Dit bestand is geen geldige RepertoireLab-back-up.');
+      const parsed = raw as { lines: unknown[]; repertoires?: unknown; activeRepertoireId?: unknown; missedMoves?: unknown; moveMemory?: unknown };
+      const lineIds = new Set<string>();
+      const nextLines: Line[] = parsed.lines.map((item, index) => {
+        if (!isPlainRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
+            typeof item.moves !== 'string' || !['Wit', 'Zwart'].includes(String(item.color)) ||
+            !Array.isArray(item.tags) || !item.tags.every(tag => typeof tag === 'string') || typeof item.note !== 'string') {
+          throw new Error('Variant ' + (index + 1) + ' heeft ongeldige gegevens. Er is niets gewijzigd.');
+        }
+        if (lineIds.has(item.id)) throw new Error('Dubbel variant-ID gevonden: ' + item.id + '. Er is niets gewijzigd.');
+        lineIds.add(item.id);
+        try { parseStrictPgn(item.moves); } catch { throw new Error('Ongeldige of lege zetten in variant: ' + item.name + '. Er is niets gewijzigd.'); }
+        return { id: item.id, name: item.name, moves: item.moves, color: item.color as 'Wit' | 'Zwart',
+          tags: item.tags as string[], note: item.note, repertoireId: typeof item.repertoireId === 'string' ? item.repertoireId : undefined,
+          due: Number.isFinite(item.due) ? Number(item.due) : 0, seen: Number.isFinite(item.seen) ? Number(item.seen) : 0,
+          intervalDays: Number.isFinite(item.intervalDays) ? Number(item.intervalDays) : undefined };
+      });
+      const rawReps = Array.isArray(parsed.repertoires) ? parsed.repertoires : [];
+      const repIds = new Set<string>();
+      const nextReps: Repertoire[] = rawReps.map((item, index) => {
+        if (!isPlainRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
+            !['Wit', 'Zwart'].includes(String(item.color))) throw new Error('Repertoire ' + (index + 1) + ' heeft ongeldige gegevens. Er is niets gewijzigd.');
+        if (repIds.has(item.id)) throw new Error('Dubbel repertoire-ID gevonden: ' + item.id + '. Er is niets gewijzigd.');
+        repIds.add(item.id);
+        return { id: item.id, name: item.name, color: item.color as 'Wit' | 'Zwart', createdAt: Number.isFinite(item.createdAt) ? Number(item.createdAt) : Date.now() };
+      });
+      const validCounterMap = (value: unknown): value is Record<string, number> => isPlainRecord(value) &&
+        Object.entries(value).every(([key, count]) => key.length > 0 && typeof count === 'number' && Number.isFinite(count) && count >= 0);
+      const validMemoryMap = (value: unknown): value is typeof moveMemory => isPlainRecord(value) &&
+        Object.entries(value).every(([key, entry]) => key.length > 0 && isPlainRecord(entry) &&
+          Number.isFinite(entry.seen) && Number(entry.seen) >= 0 && Number.isFinite(entry.misses) && Number(entry.misses) >= 0 &&
+          Number.isFinite(entry.due) && Number(entry.due) >= 0 && Number.isFinite(entry.intervalDays) && Number(entry.intervalDays) >= 0 &&
+          (entry.lastResult === undefined || entry.lastResult === 'good' || entry.lastResult === 'miss'));
+      if (parsed.missedMoves !== undefined && !validCounterMap(parsed.missedMoves)) throw new Error('De foutenteller in deze back-up is ongeldig.');
+      if (parsed.moveMemory !== undefined && !validMemoryMap(parsed.moveMemory)) throw new Error('De herhalingsgegevens in deze back-up zijn ongeldig.');
       if (!window.confirm('De huidige gegevens vervangen door deze back-up? Exporteer eerst een back-up om gegevens te bewaren.')) return;
-      setLines(parsed.lines); setRepertoires(nextReps); setActiveRepertoireId(nextReps.some(item => item.id === parsed.activeRepertoireId) ? parsed.activeRepertoireId! : nextReps[0]?.id ?? '');
-      setMissedMoves(parsed.missedMoves && typeof parsed.missedMoves === 'object' ? parsed.missedMoves : {}); setMoveMemory(parsed.moveMemory && typeof parsed.moveMemory === 'object' ? parsed.moveMemory : {});
-      setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up gevalideerd en teruggezet.');
+      const chosenRepertoire = typeof parsed.activeRepertoireId === 'string' && nextReps.some(item => item.id === parsed.activeRepertoireId)
+        ? parsed.activeRepertoireId : nextReps[0]?.id ?? '';
+      setLines(nextLines); setRepertoires(nextReps); setActiveRepertoireId(chosenRepertoire);
+      setMissedMoves(parsed.missedMoves === undefined ? {} : parsed.missedMoves as Record<string, number>);
+      setMoveMemory(parsed.moveMemory === undefined ? {} : parsed.moveMemory as typeof moveMemory);
+      setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up volledig gecontroleerd en teruggezet.');
     } catch (error) { setNotice('Back-up niet teruggezet: ' + (error instanceof Error ? error.message : 'bestand niet leesbaar.')); }
   }
   function submitTrainingMove() {
