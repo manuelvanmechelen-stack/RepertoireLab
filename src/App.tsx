@@ -892,6 +892,19 @@ function App() {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
   }, [lines]);
   useEffect(() => { localStorage.setItem('repertoirelab-repertoires-v1', JSON.stringify(repertoires)); }, [repertoires]);
+  useEffect(() => {
+    if (repertoires.length || !lines.length) return;
+    const migrated: Repertoire[] = [];
+    for (const color of ['Wit', 'Zwart'] as const) {
+      if (lines.some(line => line.color === color)) migrated.push({ id: 'migrated-' + color.toLowerCase(), name: 'Geïmporteerd repertoire ' + color.toLowerCase(), color, createdAt: Date.now() });
+    }
+    if (migrated.length) {
+      setRepertoires(migrated);
+      setLines(previous => previous.map(line => ({ ...line, repertoireId: line.repertoireId ?? 'migrated-' + line.color.toLowerCase() })));
+      setActiveRepertoireId(migrated[0].id);
+    }
+  }, [repertoires.length, lines.length]);
+
   useEffect(() => { localStorage.setItem('repertoirelab-active-repertoire-v1', activeRepertoireId); }, [activeRepertoireId]);
 
   useEffect(() => {
@@ -1124,20 +1137,29 @@ function App() {
     setExplorerError('');
     setNotice('Stelling uit de repertoireboom geladen.');
   }
+  function createRepertoire() {
+    const name = newRepertoireName.trim();
+    if (!name) { setNotice('Geef je repertoire een naam.'); return; }
+    const repertoire: Repertoire = { id: crypto.randomUUID(), name, color: newColor, createdAt: Date.now() };
+    setRepertoires(previous => [...previous, repertoire]);
+    setActiveRepertoireId(repertoire.id);
+    setActive('');
+    setGame(newGame());
+    setSelected(null);
+    setNewRepertoireName('');
+    setNotice('Repertoire aangemaakt. Speel zetten op het bord om je eerste variant op te bouwen.');
+  }
+
   function saveCurrentBranch() {
     const history = game.history();
-    if (!history.length) {
-      setNotice('Speel eerst minstens één zet voordat je een vertakking opslaat.');
-      return;
-    }
-    if (!branchName.trim()) {
-      setNotice('Geef de nieuwe vertakking eerst een naam.');
-      return;
-    }
+    if (!history.length) { setNotice('Speel eerst minstens één zet voordat je een variant opslaat.'); return; }
+    if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan.'); return; }
+    if (!branchName.trim()) { setNotice('Geef de nieuwe variant eerst een naam.'); return; }
     const branch: Line = {
       id: crypto.randomUUID(),
+      repertoireId: activeRepertoire.id,
       name: branchName.trim(),
-      color: current?.color ?? 'Wit',
+      color: activeRepertoire.color,
       moves: game.pgn(),
       tags: [...(current?.tags ?? []), 'Eigen vertakking'],
       note: current?.note ?? '',
@@ -1147,7 +1169,7 @@ function App() {
     setLines(previous => [branch, ...previous]);
     setActive(branch.id);
     setBranchName('');
-    setNotice('Vertakking opgeslagen in je repertoireboom.');
+    setNotice('Variant opgeslagen in ' + activeRepertoire.name + '.');
   }
   function replaceCurrentLine() {
     if (!current) return;
@@ -1183,6 +1205,7 @@ function App() {
     setSelected(null);
   }
   function saveLine() {
+    if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan voordat je een variant opslaat.'); return; }
     if (!newName.trim()) {
       setNotice('Geef de variant een naam.');
       return;
@@ -1204,8 +1227,9 @@ function App() {
     }
     const line: Line = {
       id: crypto.randomUUID(),
+      repertoireId: activeRepertoire.id,
       name: newName.trim(),
-      color: newColor,
+      color: activeRepertoire.color,
       moves: newMoves.trim(),
       tags: ['Eigen variant'],
       note: newNote.trim(),
@@ -1221,15 +1245,12 @@ function App() {
     setNotice('Variant opgeslagen.');
   }
   function deleteLine(id: string) {
-    if (lines.length <= 1) {
-      setNotice('Je moet minstens één variant bewaren.');
-      return;
-    }
     const next = lines.filter(line => line.id !== id);
     setLines(next);
     if (active === id) {
-      setActive(next[0].id);
-      setGame(newGame(next[0].moves));
+      const nextInRepertoire = next.find(line => line.repertoireId === activeRepertoireId);
+      setActive(nextInRepertoire?.id ?? '');
+      setGame(newGame(nextInRepertoire?.moves));
     }
     setNotice('Variant verwijderd.');
   }
