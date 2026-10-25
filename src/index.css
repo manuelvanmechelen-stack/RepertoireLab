@@ -1682,3 +1682,17 @@ textarea:focus-visible {
   line-height: 1.6;
   margin: 4px 0 0;
 }
+
+.builder-import-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #3b3b4c;
+  border-radius: 12px;
+  background: #191a24;
+}
+.builder-import-heading { display: grid; gap: 5px; }
+.builder-import-heading strong { font-size: 13px; color: #f0eff8; }
+.builder-import-heading span { font-size: 12px; line-height: 1.5; color: #aaaabd; }
+.builder-import-panel .secondary { justify-self: start; }
+.modal textarea { width: 100%; resize: vertical; }
