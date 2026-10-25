@@ -2470,6 +2470,16 @@ function App() {
                               <span className="model-game-number">{index + 1}</span><span className="model-game-players"><strong>{model.players?.white?.name ?? 'Wit'} {model.players?.white?.rating ? '(' + model.players.white.rating + ')' : ''} – {model.players?.black?.name ?? 'Zwart'} {model.players?.black?.rating ? '(' + model.players.black.rating + ')' : ''}</strong><small>{model.year ?? ''}{model.month ? '-' + model.month : ''} · {model.winner === 'white' ? 'Wit wint' : model.winner === 'black' ? 'Zwart wint' : 'Remise / onbekend'}</small></span><ChevronRight size={15} />
                             </a>)}
                           </section>}
+                          {evalResult && evalFen === game.fen() && recommendedMoves.length > 1 && (() => {
+                            const engineTopUci = evalResult.pvs[0]?.moves.trim().split(/\s+/)[0];
+                            const engineTop = recommendedMoves.find(move => move.uci === engineTopUci);
+                            const databaseTop = [...recommendedMoves].sort((a, b) => b.total - a.total)[0];
+                            return engineTop && databaseTop && engineTop.uci !== databaseTop.uci ? (
+                              <div className="explorer-message" role="status">
+                                <strong>Engine en praktijk verschillen:</strong> Stockfish kiest {engineTop.san} als eerste kandidaat, terwijl {databaseTop.san} het vaakst is gespeeld ({databaseTop.total.toLocaleString('nl-NL')} partijen). Populariteit is niet hetzelfde als de beste zet; bekijk beide plannen voordat je kiest.
+                              </div>
+                            ) : null;
+                          })()}
                           <div className="explorer-moves">
                             {recommendedMoves.map((move, index) => {
                               const total = move.total;
