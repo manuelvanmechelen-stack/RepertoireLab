@@ -180,6 +180,36 @@ const repertoireTemplates: Line[] = [
     tags: ['Wit', 'Tegen Pirc'], note: 'Plan: bouw een breed centrum op en bereid e5 voor. Ontwikkel met Nf3, Be2 en rokade; controleer tactieken voordat je het centrum opent.', due: 0, seen: 0,
   },
   {
+    id: 'white-alapin-template', name: 'Wit — Siciliaans: Alapin', color: 'Wit',
+    moves: '1. e4 c5 2. c3',
+    tags: ['Wit', 'Tegen Siciliaans', 'Alapin'], note: 'Bouw met d4 een breed centrum op. Na ...d5 moet je de centrale spanning zorgvuldig behandelen; ontwikkel snel en let op tactieken op e4.', due: 0, seen: 0,
+  },
+  {
+    id: 'white-closed-sicilian-template', name: 'Wit — Gesloten Siciliaans', color: 'Wit',
+    moves: '1. e4 c5 2. Nc3',
+    tags: ['Wit', 'Tegen Siciliaans', 'Gesloten'], note: 'Ontwikkel met g3, Bg2 en d3. Kies afhankelijk van zwarts opstelling tussen f4 en een rustigere opbouw; let op ...d5 als centrale tegenstoot.', due: 0, seen: 0,
+  },
+  {
+    id: 'white-grand-prix-template', name: 'Wit — Siciliaans: Grand Prix', color: 'Wit',
+    moves: '1. e4 c5 2. Nc3 Nc6 3. f4',
+    tags: ['Wit', 'Tegen Siciliaans', 'Aanval'], note: 'Wit kiest voor snelle ontwikkeling en koningsvleugelruimte. Ontwikkel Nf3 en Bc4 of Bb5; speel f5 alleen wanneer het centrum en de koning veilig zijn.', due: 0, seen: 0,
+  },
+  {
+    id: 'white-rossolimo-template', name: 'Wit — Rossolimo tegen 2...Nc6', color: 'Wit',
+    moves: '1. e4 c5 2. Nf3 Nc6 3. Bb5',
+    tags: ['Wit', 'Tegen Siciliaans', 'Rossolimo'], note: 'Wit voorkomt een open Siciliaans met ...d6 en ...Nf6 in de gebruikelijke volgorde. Kies tussen Bxc6 en rustig ontwikkelen op basis van zwarts ...g6, ...e6 of ...d6.', due: 0, seen: 0,
+  },
+  {
+    id: 'white-moscow-template', name: 'Wit — Moskou tegen 2...d6', color: 'Wit',
+    moves: '1. e4 c5 2. Nf3 d6 3. Bb5+',
+    tags: ['Wit', 'Tegen Siciliaans', 'Moskou'], note: 'De schaakzet dwingt zwart tot een concrete reactie en vermijdt vaak de hoofdvarianten. Ontwikkel daarna soepel; bepaal je pionnenstructuur op basis van ...Bd7 of ...Nd7.', due: 0, seen: 0,
+  },
+  {
+    id: 'white-smith-morra-template', name: 'Wit — Smith-Morra-gambiet', color: 'Wit',
+    moves: '1. e4 c5 2. d4 cxd4 3. c3',
+    tags: ['Wit', 'Tegen Siciliaans', 'Gambiet'], note: 'Wit offert een pion voor snelle ontwikkeling en open lijnen. Als zwart accepteert, ontwikkel snel en vermijd herhaalde zetten; controleer tactieken voordat je de aanval forceert.', due: 0, seen: 0,
+  },
+  {
     id: 'black-najdorf-template', name: 'Zwart — Najdorf tegen 1.e4', color: 'Zwart',
     moves: '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6',
     tags: ['Zwart', 'Tegen 1.e4'], note: 'Plan: speel ...e5 of ...e6 afhankelijk van wits opstelling; ...b5 geeft ruimte op de damevleugel. Ontwikkel de loper en rokade pas als de koning veilig staat.', due: 0, seen: 0,
