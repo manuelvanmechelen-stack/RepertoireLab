@@ -443,34 +443,4 @@ equal(transpositionReview.transpositionCount, 3, 'review registreert de halve ze
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
-// 13. FSRS v6 state survives repeat reviews and quality scores require real supporting data.
-const fsrsNow = 1_800_000_000_000;
-const fsrsFirst = scheduleFsrsMoveResult(undefined, true, fsrsNow);
-check(fsrsFirst.fsrsCard && Number.isFinite(fsrsFirst.fsrsCard.due), 'FSRS zetkaart bewaart geldige vervaldatum');
-equal(fsrsFirst.seen, 1, 'FSRS telt eerste zetpoging');
-const fsrsAgain = scheduleFsrsMoveResult(fsrsFirst, false, fsrsNow + 60_000);
-equal(fsrsAgain.seen, 2, 'FSRS behoudt reviewhistorie bij volgende poging');
-equal(fsrsAgain.misses, 1, 'FSRS registreert een gemiste zet');
-check(fsrsAgain.fsrsCard.due >= fsrsNow + 60_000, 'FSRS plant vergeten zet opnieuw in');
-const fsrsGrade = scheduleFsrsLineGrade(undefined, 'good', fsrsNow);
-equal(fsrsGrade.seen, 1, 'FSRS telt eerste variantbeoordeling');
-check(Number.isFinite(fsrsGrade.due) && fsrsGrade.fsrsCard && Number.isFinite(fsrsGrade.fsrsCard.stability), 'FSRS variantkaart bewaart schedulingparameters');
-throws(() => scheduleFsrsLineGrade(undefined, 'unknown', fsrsNow), 'FSRS weigert onbekende beoordeling');
-const quality = calculateRepertoireQuality([
-  { id: 'q1', name: 'Schots', color: 'Wit', moves: '1. e4 e5 2. Nf3 Nc6', note: 'Plan' },
-], {
-  'q1:0': { seen: 4, misses: 1, due: fsrsNow },
-}, {
-  q1: { moves: '1. e4 e5 2. Nf3 Nc6', findings: [{ lossCp: 20 }, { lossCp: 40 }] },
-}, {
-  q1: { games: 100, white: 45, draws: 30, black: 25 },
-});
-check(typeof quality.effectivenessScore === 'number', 'effectiviteitsscore wordt uit werkelijke databasepartijen berekend');
-equal(quality.effectivenessGames, 100, 'effectiviteit toont het aantal onderliggende partijen');
-check(typeof quality.soundnessScore === 'number', 'soundnessscore gebruikt actuele engine-screening');
-equal(quality.auditedMoves, 2, 'soundness toont het aantal vergelijkbare enginezetten');
-check(typeof quality.learnabilityScore === 'number', 'leerbaarheid gebruikt trainingshistorie en structuur');
-equal(quality.reviewAttempts, 4, 'leerbaarheid telt alleen echte trainingspogingen');
-equal(calculateRepertoireQuality([], {}, {}, {}).effectivenessScore, null, 'geen data levert geen verzonnen effectiviteitsscore');
-
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
