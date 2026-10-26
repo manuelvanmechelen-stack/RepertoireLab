@@ -2121,8 +2121,13 @@ function App() {
           } else if (!playedPv) {
             status = 'Niet in top 5 — exact evaluatieverlies onbekend';
           } else {
-            lossCp = evaluationLossCp(cpScore(bestPv ?? {}), cpScore(playedPv), move.color);
-            status = lossCp >= 200 ? 'Grote evaluatieafwijking — controleer tactiek' : lossCp >= 80 ? 'Mogelijk onnauwkeurig — nader bekijken' : 'Kleine evaluatieafwijking';
+            const calculatedLoss = evaluationLossCp(cpScore(bestPv ?? {}), cpScore(playedPv), move.color);
+            if (calculatedLoss === null) {
+              status = 'Evaluatieverschil niet beschikbaar';
+            } else {
+              lossCp = calculatedLoss;
+              status = lossCp >= 200 ? 'Grote evaluatieafwijking — controleer tactiek' : lossCp >= 80 ? 'Mogelijk onnauwkeurig — nader bekijken' : 'Kleine evaluatieafwijking';
+            }
           }
           findings.push({ ply: index + 1, san: move.san, bestMove: sanForUci(bestUci), lossCp, status });
           analyzedOwnMoves++;
