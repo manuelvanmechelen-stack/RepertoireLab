@@ -965,6 +965,7 @@ function App() {
       return saved?.date === today && typeof saved.count === 'number' && Number.isFinite(saved.count) ? { date: today, count: saved.count } : { date: today, count: 0 };
     } catch { return { date: today, count: 0 }; }
   });
+  const [dailyTrainingGoal, setDailyTrainingGoal] = useState<number>(() => { try { const value = Number(localStorage.getItem('repertoirelab-daily-training-goal-v1')); return [5, 10, 20, 30].includes(value) ? value : 10; } catch { return 10; } });
   const [trainingInput, setTrainingInput] = useState('');
   const [trainingFeedback, setTrainingFeedback] = useState('');
   const [trainingComplete, setTrainingComplete] = useState(false);
@@ -1010,6 +1011,7 @@ function App() {
   }, [missedMoves]);
   useEffect(() => { localStorage.setItem('repertoirelab-move-memory-v1', JSON.stringify(moveMemory)); }, [moveMemory]);
   useEffect(() => { localStorage.setItem('repertoirelab-daily-training-v1', JSON.stringify(dailyTraining)); }, [dailyTraining]);
+  useEffect(() => { localStorage.setItem('repertoirelab-daily-training-goal-v1', String(dailyTrainingGoal)); }, [dailyTrainingGoal]);
   useEffect(() => { localStorage.setItem('repertoirelab-engine-line-audits-v1', JSON.stringify(engineLineAudits)); }, [engineLineAudits]);
   useEffect(() => {
     if (explorerToken.trim()) localStorage.setItem('repertoirelab-lichess-token-v1', explorerToken.trim());
@@ -2094,7 +2096,7 @@ function App() {
       for (let index = 0; index < moves.length; index++) {
         const move = moves[index];
         const isOwnMove = current.color === 'Wit' ? move.color === 'w' : move.color === 'b';
-        if (isOwnMove && analyzedOwnMoves < 16) {
+        if (isOwnMove && analyzedOwnMoves < 40) {
           const analysis = await runLocalStockfish(replay.fen(), engineAuditDepth);
           const actualUci = move.from + move.to + (move.promotion ?? '');
           const bestPv = analysis.pvs[0];
@@ -2117,7 +2119,9 @@ function App() {
           } else if (!playedPv) {
             status = 'Niet in top 5 — exact evaluatieverlies onbekend';
           } else {
-            lossCp = Math.max(0, cpScore(bestPv ?? {}) - cpScore(playedPv));
+            const bestForMover = move.color === 'w' ? cpScore(bestPv ?? {}) : -cpScore(bestPv ?? {});
+            const playedForMover = move.color === 'w' ? cpScore(playedPv) : -cpScore(playedPv);
+            lossCp = Math.max(0, bestForMover - playedForMover);
             status = lossCp >= 200 ? 'Grote evaluatieafwijking — controleer tactiek' : lossCp >= 80 ? 'Mogelijk onnauwkeurig — nader bekijken' : 'Kleine evaluatieafwijking';
           }
           findings.push({ ply: index + 1, san: move.san, bestMove: sanForUci(bestUci), lossCp, status });
@@ -2562,7 +2566,7 @@ function App() {
                 </div>
                 {qualityAuditDone && qualityAudit.length === 0 && <div className="coverage-summary">Geen databasewaarschuwingen gevonden voor de eigen zetten in dit repertoire. Dit is geen bewijs dat alle zetten engine-technisch optimaal zijn.</div>}
                 {engineLineAudits[current.id] && engineLineAudits[current.id].moves === current.moves && <section className="coverage-results engine-line-audit-results">
-                  <div className="coverage-summary"><strong>Stockfish 19 Lite · diepte {engineLineAudits[current.id].depth}</strong> · Geanalyseerd op {new Date(engineLineAudits[current.id].analyzedAt).toLocaleString('nl-NL')}. Alleen eigen zetten, maximaal zestien per variant. Dit is een screening, geen volledige partij- of blunderanalyse.</div>
+                  <div className="coverage-summary"><strong>Stockfish 19 Lite · diepte {engineLineAudits[current.id].depth}</strong> · Geanalyseerd op {new Date(engineLineAudits[current.id].analyzedAt).toLocaleString('nl-NL')}. Alle eigen zetten worden gecontroleerd (maximaal 40 per variant). De vergelijking gebruikt de evaluatie vanuit het perspectief van de speler die aan zet is; dit blijft een screening, geen volledige partij- of blunderanalyse.</div>
                   {engineLineAudits[current.id].findings.map(item => <div className="coverage-row" key={item.ply}>
                     <div><strong>Zet {item.ply}: {item.san} · beste kandidaat: {item.bestMove}</strong><span>{item.status}{item.lossCp === null ? '' : ' · geschat verschil ' + (item.lossCp / 100).toFixed(2) + ' pionnen'}</span></div>
                   </div>)}
@@ -3336,11 +3340,12 @@ function App() {
                     <div className="session-progress">
                       <div>
                         <span>Voortgang van vandaag</span>
-                        <b>{dailyTraining.count} beoordeelde varianten</b>
+                        <b>{dailyTraining.count} / {dailyTrainingGoal} beoordeelde varianten</b>
+                          <label className="daily-goal-label">Dagdoel <select aria-label="Dagdoel herhalingen" value={dailyTrainingGoal} onChange={event => setDailyTrainingGoal(Number(event.target.value))}><option value={5}>5 varianten</option><option value={10}>10 varianten</option><option value={20}>20 varianten</option><option value={30}>30 varianten</option></select></label>
                       </div>
                       <div className="progress-track">
                         <div
-                          style={{ width: Math.min(100, dailyTraining.count * 8) + '%' }}
+                          style={{ width: Math.min(100, Math.round(dailyTraining.count / dailyTrainingGoal * 100)) + '%' }}
                         />
                       </div>
                     </div>
