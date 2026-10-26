@@ -17,3 +17,24 @@ export function rankCoverageMoves(moves, minGames = 20, limit = 3) {
     .sort((a, b) => b.games - a.games || a.san.localeCompare(b.san))
     .slice(0, max);
 }
+
+
+/**
+ * Summarize how much of the observed continuation frequency is covered by a
+ * repertoire at one position. Only moves with usable samples contribute.
+ */
+export function summarizeCoverageMoves(moves, knownSans = [], minGames = 20) {
+  const known = new Set((Array.isArray(knownSans) ? knownSans : []).map(san => String(san).replace(/[!?+#]+/g, '')));
+  const ranked = rankCoverageMoves(moves, minGames, Number.MAX_SAFE_INTEGER)
+    .map(move => ({ ...move, normalizedSan: move.san.replace(/[!?+#]+/g, '') }));
+  const totalGames = ranked.reduce((sum, move) => sum + move.games, 0);
+  const coveredGames = ranked.reduce((sum, move) => sum + (known.has(move.normalizedSan) ? move.games : 0), 0);
+  return {
+    totalGames,
+    coveredGames,
+    weightedCoverage: totalGames ? Math.round(coveredGames / totalGames * 100) : null,
+    missingMoves: ranked.filter(move => !known.has(move.normalizedSan)),
+    observedMoves: ranked.length,
+    coveredMoves: ranked.filter(move => known.has(move.normalizedSan)).length,
+  };
+}
