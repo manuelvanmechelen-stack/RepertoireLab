@@ -934,7 +934,7 @@ function App() {
     const saved = Number(localStorage.getItem('repertoirelab-position-goal-v1'));
     return Number.isFinite(saved) && saved >= 1 ? saved : 1000;
   });
-  const [coverage, setCoverage] = useState<Record<string, { games: number; error?: string }>>({});
+  const [coverage, setCoverage] = useState<Record<string, { games: number; error?: string; suggestions?: Array<ExplorerMove & { games: number }> }>>({});
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [qualityAudit, setQualityAudit] = useState<{ lineId: string; lineName: string; ply: number; san: string; severity: 'high' | 'medium'; message: string; games: number }[]>([]);
   const [qualityLoading, setQualityLoading] = useState(false);
@@ -1093,22 +1093,27 @@ function App() {
     if (coverageLoading || !repertoireLines.length) return;
     setCoverageLoading(true);
     setCoverage({});
-    const results: Record<string, { games: number; error?: string }> = {};
+    const results: Record<string, { games: number; error?: string; suggestions?: Array<ExplorerMove & { games: number }> }> = {};
     try {
       for (const line of repertoireLines) {
-        const position = newGame(line.moves);
-        const fen = position.fen();
         try {
+          const position = newGame(line.moves);
           const url = new URL('https://explorer.lichess.org/masters');
           url.searchParams.set('variant', 'standard');
-          url.searchParams.set('fen', fen);
-          url.searchParams.set('moves', '1');
+          url.searchParams.set('fen', position.fen());
+          url.searchParams.set('moves', '8');
           url.searchParams.set('topGames', '0');
           url.searchParams.set('recentGames', '0');
           const response = await fetchExplorer(url);
           if (!response.ok) throw new Error(explorerHttpError(response.status));
           const data = await response.json() as ExplorerResult;
-          results[line.id] = { games: (data.white || 0) + (data.draws || 0) + (data.black || 0) };
+          const totalGames = (data.white || 0) + (data.draws || 0) + (data.black || 0);
+          const suggestions = (data.moves ?? [])
+            .map(move => ({ ...move, games: (move.white || 0) + (move.draws || 0) + (move.black || 0) }))
+            .filter(move => move.games >= 20)
+            .sort((a, b) => b.games - a.games)
+            .slice(0, 3);
+          results[line.id] = { games: totalGames, suggestions };
         } catch (error) {
           results[line.id] = { games: 0, error: error instanceof Error ? error.message : 'Database niet bereikbaar' };
         }
@@ -1116,6 +1121,41 @@ function App() {
       }
     } finally {
       setCoverageLoading(false);
+    }
+  }
+
+  function addCoverageSuggestion(line: Line, san: string) {
+    if (!activeRepertoire) {
+      setNotice('Selecteer eerst het repertoire waarin je deze vertakking wilt opslaan.');
+      return;
+    }
+    try {
+      const position = newGame(line.moves);
+      position.move(san);
+      const moves = position.pgn();
+      const signature = position.history().join(' ');
+      const duplicate = repertoireLines.some(existing => {
+        try { return newGame(existing.moves).history().join(' ') === signature; } catch { return false; }
+      });
+      if (duplicate) {
+        setNotice('Deze volledige zetvolgorde staat al in je repertoire.');
+        return;
+      }
+      const addition: Line = {
+        id: crypto.randomUUID(),
+        repertoireId: line.repertoireId ?? activeRepertoireId,
+        name: line.name + ' — ' + san,
+        color: line.color,
+        moves,
+        tags: [...new Set([...line.tags, 'Database-vertakking'])],
+        note: 'Vervolg voorgesteld door de Lichess Masters-database op basis van partijfrequentie. Dit is geen enginebevestiging; controleer de zet en het plan voordat je de variant leert.',
+        due: 0,
+        seen: 0,
+      };
+      setLines(previous => [...previous, addition]);
+      setNotice('Databasevervolg ' + san + ' toegevoegd aan ' + line.name + '. Controleer de variant voordat je deze leert.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Het databasevervolg kon niet worden toegevoegd.');
     }
   }
 
@@ -1662,12 +1702,15 @@ function App() {
     if (trainingPly >= expected.length) { setTrainingComplete(true); return; }
     const input = trainingInput.trim().replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
     const answer = expected[trainingPly].replace(/[!?+#]+/g, '');
+    const key = review.id + ':' + trainingPly;
     if (input === answer) {
+      setMoveMemory(previous => ({ ...previous, [key]: scheduleMoveResult(previous[key], true) }));
       const next = trainingPly + 1;
       setTrainingPly(next); setTrainingInput('');
       setTrainingFeedback('Correct: ' + expected[trainingPly] + (next === expected.length ? ' — einde van de variant.' : ''));
       if (next === expected.length) setTrainingComplete(true);
     } else {
+      setMoveMemory(previous => ({ ...previous, [key]: scheduleMoveResult(previous[key], false) }));
       setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
       setTrainingFeedback('Niet goed. Probeer opnieuw; denk aan de ontwikkelingszet en de dreiging in deze stelling.');
     }
@@ -2364,7 +2407,9 @@ function App() {
                       const result = coverage[line.id];
                       return (
                         <div className="coverage-row" key={line.id}>
-                          <div><strong>{line.name}</strong><span>{result.error ? result.error : result.games.toLocaleString('nl-NL') + ' masterpartijen bij de eindstelling'}</span></div>
+                          <div><strong>{line.name}</strong><span>{result.error ? result.error : result.games.toLocaleString('nl-NL') + ' masterpartijen bij de eindstelling'}</span>
+                            {!result.error && result.suggestions?.length ? <div className="coverage-suggestions"><span>Populaire vervolgen uit de Masters-database:</span>{result.suggestions.map(move => <button key={move.uci} className="text-button" onClick={() => addCoverageSuggestion(line, move.san)} title={move.games.toLocaleString('nl-NL') + ' partijen'}>{move.san} · {move.games.toLocaleString('nl-NL')}</button>)}</div> : !result.error ? <span>Geen vervolg met minimaal 20 masterpartijen gevonden.</span> : null}
+                          </div>
                           <span className={result.error ? 'coverage-status pending' : result.games <= positionGoal ? 'coverage-status done' : 'coverage-status extend'}>{result.error ? 'Niet gecontroleerd' : result.games <= positionGoal ? 'Diepte gehaald' : 'Voeg meer zetten toe'}</span>
                         </div>
                       );
