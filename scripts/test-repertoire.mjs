@@ -445,7 +445,7 @@ throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'revi
 
 // 13. Custom-FEN PGNs must branch from their declared starting position, not the standard root.
 const customStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
-const customFenPgn = '[Event "Custom start"]\\n[SetUp "1"]\\n[FEN "' + customStartFen + '"]\\n\\n1... c5 *';
+const customFenPgn = '[Event "Custom start"]\n[SetUp "1"]\n[FEN "' + customStartFen + '"]\n\n1... c5 *';
 const customFenTree = buildRepertoireTree([
   { id: 'custom-fen-line', name: 'Siciliaans vanaf FEN', moves: customFenPgn },
 ]);
