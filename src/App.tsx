@@ -2606,11 +2606,11 @@ function App() {
                 </section>
                 {Object.keys(coverage).length > 0 && (<>
                   <div className="coverage-summary">
-                    Repertoirediepte: {Math.round(Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length / Math.max(1, Object.keys(coverage).length) * 100)}% van de gecontroleerde lijnen zit onder je frequentiedoel. Dit meet dekking/diepte, niet de objectieve schaakkwaliteit.
+                    Repertoirediepte: {Math.round(Object.values(coverage).filter(item => !item.error && item.games > 0 && item.games <= positionGoal).length / Math.max(1, Object.keys(coverage).length) * 100)}% van de gecontroleerde lijnen zit onder je frequentiedoel. Dit meet dekking/diepte, niet de objectieve schaakkwaliteit.
                   </div>
                   <div className="coverage-results">
                     <div className="coverage-summary">
-                      {Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length} van {repertoireLines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} partijen in {coverageSource === 'masters' ? 'de masterdatabase' : ('Lichess bij ratingniveau ' + (ratingBand === 'all' ? 'alle ratings' : ratingBand))}.
+                      {Object.values(coverage).filter(item => !item.error && item.games > 0 && item.games <= positionGoal).length} van {repertoireLines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} partijen in {coverageSource === 'masters' ? 'de masterdatabase' : ('Lichess bij ratingniveau ' + (ratingBand === 'all' ? 'alle ratings' : ratingBand))}.
                     </div>
                     {repertoireLines.filter(line => coverage[line.id]).map(line => {
                       const result = coverage[line.id];
@@ -2640,7 +2640,7 @@ function App() {
                             {!result.error && result.suggestions?.length ? <div className="coverage-suggestions"><span>Veelvoorkomende vervolgen uit {coverageSource === 'masters' ? 'masterpartijen' : ('Lichess-partijen (' + (ratingBand === 'all' ? 'alle ratings' : ratingBand) + ')')}:</span>{result.suggestions.map(move => <button key={move.uci} className="text-button" onClick={() => addCoverageSuggestion(line, move.san)} title={move.games.toLocaleString('nl-NL') + ' partijen'}>{move.san} · {move.games.toLocaleString('nl-NL')}</button>)}</div> : !result.error ? <span>Geen vervolg met minimaal 20 partijen gevonden.</span> : null}
                             {coverageDetails?.missingMoves.length ? <span>Ontbrekende frequente zet: {coverageDetails.missingMoves[0].san} ({coverageDetails.missingMoves[0].games.toLocaleString('nl-NL')} partijen).</span> : null}
                           </div>
-                          <span className={result.error ? 'coverage-status pending' : result.games <= positionGoal ? 'coverage-status done' : 'coverage-status extend'}>{result.error ? 'Niet gecontroleerd' : result.games <= positionGoal ? 'Diepte gehaald' : 'Voeg meer zetten toe'}</span>
+                          <span className={result.error || result.games === 0 ? 'coverage-status pending' : result.games <= positionGoal ? 'coverage-status done' : 'coverage-status extend'}>{result.error ? 'Niet gecontroleerd' : result.games === 0 ? 'Geen databasegegevens' : result.games <= positionGoal ? 'Diepte gehaald' : 'Voeg meer zetten toe'}</span>
                         </div>
                       );
                     })}
