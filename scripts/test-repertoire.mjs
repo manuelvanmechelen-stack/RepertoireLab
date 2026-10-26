@@ -9,6 +9,7 @@ import { calculateRepertoireMetrics } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
+import { evaluationLossCp } from '../src/study/engineAudit.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -53,6 +54,12 @@ check(najdorfOpening?.name.toLowerCase().includes('najdorf'), 'Najdorf-herkennin
 const catalanOpening = identifyOpening('1. d4 Nf6 2. c4 e6 3. g3');
 check(catalanOpening?.name.toLowerCase().includes('catalan') || catalanOpening?.name.toLowerCase().includes('catalaans'), 'Catalaans wordt offline herkend');
 
+
+// 0d. Engine evaluation loss must be measured from the moving player's perspective.
+equal(evaluationLossCp(30, -70, 'w'), 100, 'wit verliest 1 pion bij evaluatiedaling van +0.30 naar -0.70');
+equal(evaluationLossCp(-30, 70, 'b'), 100, 'zwart verliest 1 pion wanneer wit-evaluatie van -0.30 naar +0.70 gaat');
+equal(evaluationLossCp(50, 10, 'b'), 0, 'zwart krijgt geen negatieve verlieswaarde als de gespeelde zet beter scoort');
+equal(evaluationLossCp(Number.NaN, 10, 'w'), null, 'ongeldige engine-evaluatie levert geen verlieswaarde op');
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
