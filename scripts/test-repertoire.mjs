@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
+import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 
 let checks = 0;
@@ -217,5 +218,25 @@ equal(fallbackBackup.activeRepertoireId, 'rep-1', 'ongeldige actieve repertoirek
 const emptyBackup = validateBackup({ lines: [], repertoires: [] });
 equal(emptyBackup.lines.length, 0, 'lege maar geldige back-up kan worden hersteld');
 equal(emptyBackup.activeRepertoireId, '', 'lege back-up heeft geen actief repertoire');
+
+// 12. Game review: identify the first concrete repertoire deviation.
+const savedLines = [
+  { id: 'main', name: 'Open Spaans', color: 'Wit', moves: '1. e4 e5 2. Nf3 Nc6 3. Bb5' },
+  { id: 'italian', name: 'Italiaans', color: 'Wit', moves: '1. e4 e5 2. Nf3 Nc6 3. Bc4' },
+];
+const deviatingGame = '[Event "Testpartij"]\n[White "Speler"]\n[Black "Tegenstander"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 d6 3. d4 *';
+const review = analyzeGameAgainstRepertoire(deviatingGame, savedLines);
+equal(review.players, 'Speler – Tegenstander', 'review gebruikt partijheaders');
+equal(review.matchedPlies, 3, 'review vindt de langste gedeelde zettenprefix');
+equal(review.firstDeviation?.ply, 3, 'review markeert de eerste afwijkende halve zet');
+equal(review.firstDeviation?.san, 'd6', 'review toont de daadwerkelijk gespeelde afwijkende zet');
+equal(review.firstDeviation?.expectedMoves.join(','), 'Nc6', 'review toont de opgeslagen antwoorden');
+check(review.summary.includes('eerste afwijking bij 2... d6'), 'review maakt afwijking begrijpelijk met zetnummer');
+const coveredGame = analyzeGameAgainstRepertoire('1. e4 e5 2. Nf3 Nc6 3. Bc4', savedLines);
+equal(coveredGame.firstDeviation, null, 'een volledige match tot het einde van de partij heeft geen afwijking');
+check(coveredGame.summary.includes('Italiaans'), 'review herkent welke repertoirelijn gevolgd is');
+const uncoveredGame = analyzeGameAgainstRepertoire('1. d4 d5 2. c4', savedLines);
+equal(uncoveredGame.firstDeviation?.kind, 'gap', 'review onderscheidt ontbrekende dekking van een afwijking');
+throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
