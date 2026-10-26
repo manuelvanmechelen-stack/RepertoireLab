@@ -7,6 +7,7 @@ import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics } from './study/analytics.mjs';
+import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
   BarChart3,
@@ -1052,6 +1053,8 @@ function App() {
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
   const repertoireMetrics = useMemo(() => calculateRepertoireMetrics(lines, moveMemory, Date.now(), engineLineAudits), [lines, moveMemory, engineLineAudits]);
+  const repertoireTree = useMemo(() => buildRepertoireTree(repertoireLines), [repertoireLines]);
+  const treePositionMoves = getRepertoireContinuations(repertoireTree, game.fen());
   const trainingHealth = useMemo(() => {
     const ownMoves = Object.entries(moveMemory).filter(([key]) => lines.some(line => key.startsWith(line.id + ':')));
     const moveAttempts = ownMoves.reduce((sum, [, item]) => sum + item.seen, 0);
