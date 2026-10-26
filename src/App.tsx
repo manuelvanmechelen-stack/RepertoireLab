@@ -1734,6 +1734,21 @@ function App() {
     if (!history.length) { setNotice('Speel eerst minstens één zet voordat je een variant opslaat.'); return; }
     if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan.'); return; }
     if (!branchName.trim()) { setNotice('Geef de nieuwe variant eerst een naam.'); return; }
+
+    // Chessbook-style repertoire trees should not accumulate duplicate full move paths.
+    const movePath = history.join(' ');
+    const duplicate = repertoireLines.find(line => {
+      try { return newGame(line.moves).history().join(' ') === movePath; }
+      catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setBranchName('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
+
     const branch: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
