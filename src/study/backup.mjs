@@ -13,7 +13,7 @@ function strictPgn(pgn) {
 export function validateBackup(raw) {
   if (!isRecord(raw) || !Array.isArray(raw.lines)) throw new Error('Dit bestand is geen geldige RepertoireLab-back-up.');
   const lineIds = new Set();
-  const lines = raw.lines.map((item, index) => {
+  const validFsrsCard = value => isRecord(value) && Number.isFinite(value.due) && value.due >= 0 &&\n    (value.last_review === null || Number.isFinite(value.last_review)) && Number.isFinite(value.stability) && value.stability >= 0 &&\n    Number.isFinite(value.difficulty) && value.difficulty >= 0 && Number.isFinite(value.scheduled_days) && value.scheduled_days >= 0;\n  const lines = raw.lines.map((item, index) => {
     if (!isRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
       typeof item.moves !== 'string' || !['Wit', 'Zwart'].includes(item.color) ||
       !Array.isArray(item.tags) || !item.tags.every(tag => typeof tag === 'string') || typeof item.note !== 'string') {
@@ -27,7 +27,7 @@ export function validateBackup(raw) {
       note: item.note, repertoireId: typeof item.repertoireId === 'string' ? item.repertoireId : undefined,
       due: Number.isFinite(item.due) && item.due >= 0 ? item.due : 0,
       seen: Number.isFinite(item.seen) && item.seen >= 0 ? item.seen : 0,
-      intervalDays: Number.isFinite(item.intervalDays) && item.intervalDays >= 0 ? item.intervalDays : undefined,
+      intervalDays: Number.isFinite(item.intervalDays) && item.intervalDays >= 0 ? item.intervalDays : undefined,\n      fsrsCard: validFsrsCard(item.fsrsCard) ? item.fsrsCard : undefined,
     };
   });
   const rawReps = Array.isArray(raw.repertoires) ? raw.repertoires : [];
@@ -44,7 +44,7 @@ export function validateBackup(raw) {
     key.length > 0 && isRecord(entry) && Number.isFinite(entry.seen) && entry.seen >= 0 &&
     Number.isFinite(entry.misses) && entry.misses >= 0 && Number.isFinite(entry.due) && entry.due >= 0 &&
     Number.isFinite(entry.intervalDays) && entry.intervalDays >= 0 &&
-    (entry.lastResult === undefined || entry.lastResult === 'good' || entry.lastResult === 'miss'));
+    (entry.lastResult === undefined || entry.lastResult === 'good' || entry.lastResult === 'miss') &&\n    (entry.fsrsCard === undefined || validFsrsCard(entry.fsrsCard)));
   if (raw.missedMoves !== undefined && !validCounterMap(raw.missedMoves)) throw new Error('De foutenteller in deze back-up is ongeldig.');
   if (raw.moveMemory !== undefined && !validMemoryMap(raw.moveMemory)) throw new Error('De herhalingsgegevens in deze back-up zijn ongeldig.');
   const validEngineAuditMap = value => isRecord(value) && Object.entries(value).every(([key, audit]) =>
