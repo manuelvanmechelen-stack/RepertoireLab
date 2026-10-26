@@ -71,7 +71,7 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
     }
   }
 
-  const moveLabel = ply => Math.floor(ply / 2) + (ply % 2 === 0 ? '.' : '...');
+  const moveLabel = ply => Math.floor(ply / 2) + 1 + (ply % 2 === 0 ? '.' : '...');
   const players = (headers.White ?? 'Wit') + ' – ' + (headers.Black ?? 'Zwart');
   const result = headers.Result ?? '*';
   const matchSummary = bestMatch.length
