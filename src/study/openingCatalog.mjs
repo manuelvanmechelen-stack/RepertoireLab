@@ -1,4 +1,4 @@
-import { Chess } from 'chess.js';
+import { LICHESS_OPENINGS } from './lichessOpenings.mjs';
 
 // Compact offline ECO recognition catalogue. Move sequences are replayed by chess.js;
 // only a position reached by the supplied line can match. Online Explorer remains
@@ -49,11 +49,19 @@ const OPENINGS = [
 
 const NORMALIZE = san => String(san ?? '').replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
 
-const compiled = OPENINGS.map(([eco, name, pgn]) => {
-  const game = new Chess();
-  try { game.loadPgn(pgn); return { eco, name, moves: game.history().map(NORMALIZE) }; }
-  catch { return null; }
-}).filter(Boolean);
+const parsePgnMoves = pgn => String(pgn ?? '')
+  .replace(/\\{[^}]*\\}/g, ' ')
+  .replace(/;[^\\n]*/g, ' ')
+  .split(/\\s+/)
+  .filter(token => token && !/^\\d+\\.(?:\\.\\.)?$/.test(token) && !/^(?:1-0|0-1|1\\/2-1\\/2|\\*)$/.test(token))
+  .map(NORMALIZE);
+
+// Lichess's CC0 ECO dataset supplies broad offline coverage. Hand-picked entries
+// remain as fallbacks for common labels where their wording is more useful.
+const compiled = [
+  ...LICHESS_OPENINGS.map(({ eco, name, pgn }) => ({ eco, name, moves: parsePgnMoves(pgn) })),
+  ...OPENINGS.map(([eco, name, pgn]) => ({ eco, name, moves: parsePgnMoves(pgn) })),
+].filter(opening => opening.moves.length > 0);
 
 /** Return the most specific offline ECO match for a PGN or SAN sequence. */
 export function identifyOpening(pgnOrMoves = '') {
@@ -68,7 +76,7 @@ export function identifyOpening(pgnOrMoves = '') {
   } catch { return null; }
   const matches = compiled.filter(opening =>
     opening.moves.length <= moves.length && opening.moves.every((move, index) => moves[index] === move)
-  ).sort((a, b) => b.moves.length - a.moves.length || a.eco.localeCompare(b.eco));
+  ).sort((a, b) => b.moves.length - a.moves.length || b.name.length - a.name.length || a.eco.localeCompare(b.eco));
   if (!matches.length) return null;
   const match = matches[0];
   return { eco: match.eco, name: match.name, matchedPlies: match.moves.length, exact: match.moves.length === moves.length };
