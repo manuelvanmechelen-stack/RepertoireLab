@@ -907,6 +907,7 @@ function App() {
   const [dueIds, setDueIds] = useState<string[]>([]);
   const [flip, setFlip] = useState(false);
   const [pgnInput, setPgnInput] = useState('');
+  const [pgnColor, setPgnColor] = useState<'Wit' | 'Zwart'>('Wit');
   const [showPgn, setShowPgn] = useState(false);
   const [explorer, setExplorer] = useState<ExplorerResult | null>(null);
   const [explorerLoading, setExplorerLoading] = useState(false);
@@ -1627,7 +1628,7 @@ function App() {
           id: crypto.randomUUID(),
           repertoireId: activeRepertoire.id,
           name: eventName && eventName !== '?' ? eventName : (chunks.length > 1 ? 'Geïmporteerde variant ' + (index + 1) : 'Geïmporteerde variant'),
-          color: activeRepertoire.color,
+          color: pgnColor,
           moves: candidate.pgn(),
           tags: ['PGN-import'],
           note: 'Geïmporteerd via PGN.',
@@ -2436,7 +2437,7 @@ function App() {
                     <option>Zwart</option>
                   </select>
                 </div>
-                <button className="secondary" onClick={() => setShowPgn(true)}>
+                <button className="secondary" onClick={() => { setPgnColor(activeRepertoire?.color ?? 'Wit'); setShowPgn(true); }}>
                   <Upload size={16} /> PGN importeren
                 </button>
               </div>
@@ -2989,6 +2990,13 @@ function App() {
                         <X size={18} />
                       </button>
                     </div>
+                    <label>
+                      Kleur van het geïmporteerde repertoire
+                      <select value={pgnColor} onChange={e => setPgnColor(e.target.value as 'Wit' | 'Zwart')}>
+                        <option value="Wit">Wit</option>
+                        <option value="Zwart">Zwart</option>
+                      </select>
+                    </label>
                     <label>
                       PGN
                       <textarea
