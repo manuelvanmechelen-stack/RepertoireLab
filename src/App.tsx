@@ -5,6 +5,7 @@ import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, selectDueOwn
 import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
+import { rankCoverageMoves } from './study/coverage.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
   BarChart3,
@@ -1108,11 +1109,7 @@ function App() {
           if (!response.ok) throw new Error(explorerHttpError(response.status));
           const data = await response.json() as ExplorerResult;
           const totalGames = (data.white || 0) + (data.draws || 0) + (data.black || 0);
-          const suggestions = (data.moves ?? [])
-            .map(move => ({ ...move, games: (move.white || 0) + (move.draws || 0) + (move.black || 0) }))
-            .filter(move => move.games >= 20)
-            .sort((a, b) => b.games - a.games)
-            .slice(0, 3);
+          const suggestions = rankCoverageMoves(data.moves) as Array<ExplorerMove & { games: number }>;
           results[line.id] = { games: totalGames, suggestions };
         } catch (error) {
           results[line.id] = { games: 0, error: error instanceof Error ? error.message : 'Database niet bereikbaar' };
