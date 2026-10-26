@@ -60,8 +60,8 @@ const parsePgnMoves = pgn => String(pgn ?? '')
 // Lichess's CC0 ECO dataset supplies broad offline coverage. Hand-picked entries
 // remain as fallbacks for common labels where their wording is more useful.
 const compiled = [
-  ...LICHESS_OPENINGS.map(({ eco, name, pgn }) => ({ eco, name, moves: parsePgnMoves(pgn) })),
   ...OPENINGS.map(([eco, name, pgn]) => ({ eco, name, moves: parsePgnMoves(pgn) })),
+  ...LICHESS_OPENINGS.map(({ eco, name, pgn }) => ({ eco, name, moves: parsePgnMoves(pgn) })),
 ].filter(opening => opening.moves.length > 0);
 
 /** Return the most specific offline ECO match for a PGN or SAN sequence. */
