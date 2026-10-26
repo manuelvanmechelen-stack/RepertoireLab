@@ -13,7 +13,7 @@ export function buildRepertoireTree(lines = []) {
   const rootKey = positionKey(start);
   nodes.set(rootKey, {
     key: rootKey, fen: start.fen(), ply: 0,
-    incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(), pathSignatures: new Set(['']),
+    incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(['']),
   });
   let validLines = 0;
   let invalidLines = 0;
@@ -28,7 +28,6 @@ export function buildRepertoireTree(lines = []) {
       validLines++;
       totalPlies += history.length;
       const cursor = new Chess();
-      let previousKey = rootKey;
       nodes.get(rootKey).lineIds.add(line.id);
       for (const move of history) {
         const beforeKey = positionKey(cursor);
@@ -59,9 +58,7 @@ export function buildRepertoireTree(lines = []) {
         }
         before.lineIds.add(line.id);
         after.lineIds.add(line.id);
-        previousKey = afterKey;
       }
-      void previousKey;
     } catch {
       invalidLines++;
     }
