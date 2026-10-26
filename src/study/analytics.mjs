@@ -3,7 +3,7 @@ import { Chess } from 'chess.js';
 const keyOf = game => game.fen().split(' ').slice(0, 4).join(' ');
 
 /** Compute only metrics supported by saved repertoire and training data. */
-export function calculateRepertoireMetrics(lines = [], moveMemory = {}, now = Date.now()) {
+export function calculateRepertoireMetrics(lines = [], moveMemory = {}, now = Date.now(), engineLineAudits = {}) {
   const positions = new Map();
   let validLines = 0;
   let moveCount = 0;
@@ -35,6 +35,14 @@ export function calculateRepertoireMetrics(lines = [], moveMemory = {}, now = Da
   const totalMisses = attempts.reduce((sum, [, value]) => sum + Math.min(value.seen, Math.max(0, Number(value.misses) || 0)), 0);
   const dueMoves = attempts.filter(([, value]) => !Number.isFinite(value.due) || value.due <= now).length;
   const branchingPositions = [...positions.values()].filter(moves => moves.size > 1).length;
+  const currentAudits = lines
+    .filter(line => engineLineAudits?.[line.id]?.moves === line.moves)
+    .flatMap(line => Array.isArray(engineLineAudits[line.id]?.findings) ? engineLineAudits[line.id].findings : []);
+  const comparableAudits = currentAudits.filter(item => typeof item.lossCp === 'number' && Number.isFinite(item.lossCp));
+  const engineConsistency = comparableAudits.length
+    ? Math.round(comparableAudits.filter(item => item.lossCp <= 80).length / comparableAudits.length * 100)
+    : null;
+  const engineOutliers = comparableAudits.filter(item => item.lossCp >= 200).length;
   return {
     validLines,
     moveCount,
