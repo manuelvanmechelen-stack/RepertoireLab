@@ -23,3 +23,16 @@ export function calculateRepertoireMetrics(
   engineConsistency: number | null;
   engineOutliers: number;
 };
+
+export type RepertoireQualityCoverage = { games: number; white?: number; draws?: number; black?: number };
+export function calculateRepertoireQuality(
+  lines?: RepertoireMetricLine[],
+  moveMemory?: Record<string, RepertoireMetricMemory>,
+  engineLineAudits?: Record<string, RepertoireMetricAudit>,
+  coverage?: Record<string, RepertoireQualityCoverage>,
+): {
+  effectivenessScore: number | null; practicalRate: number | null; effectivenessGames: number;
+  soundnessScore: number | null; averageLossCp: number | null; auditedMoves: number;
+  learnabilityScore: number | null; recallRate: number | null; reviewAttempts: number; structuralEase: number | null;
+  confidence: { effectiveness: string; soundness: string; learnability: string };
+};
