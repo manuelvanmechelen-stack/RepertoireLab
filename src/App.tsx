@@ -2684,7 +2684,15 @@ function App() {
                         <div className="coverage-row" key={line.id}>
                           <div><strong>{line.name}</strong><span>{result.error ? result.error : result.games.toLocaleString('nl-NL') + ' partijen bij de eindstelling'}</span>
                             {coverageDetails && <span>Afdekking van de getoonde frequente vervolgen: {coverageDetails.weightedCoverage === null ? 'onvoldoende data' : coverageDetails.weightedCoverage + '%'} ({coverageDetails.coveredMoves}/{coverageDetails.observedMoves} zetten; gewogen op partijfrequentie).</span>}
-                            {!result.error && result.suggestions?.length ? <div className="coverage-suggestions"><span>Veelvoorkomende vervolgen uit {coverageSource === 'masters' ? 'masterpartijen' : ('Lichess-partijen (' + (ratingBand === 'all' ? 'alle ratings' : ratingBand) + ')')}:</span>{result.suggestions.map(move => <button key={move.uci} className="text-button" onClick={() => addCoverageSuggestion(line, move.san)} title={move.games.toLocaleString('nl-NL') + ' partijen'}>{move.san} · {move.games.toLocaleString('nl-NL')}</button>)}</div> : !result.error ? <span>Geen vervolg met minimaal 20 partijen gevonden.</span> : null}
+                            {!result.error && result.suggestions?.length ? <div className="coverage-suggestions"><span>Veelvoorkomende vervolgen uit {coverageSource === 'masters' ? 'masterpartijen' : ('Lichess-partijen (' + (ratingBand === 'all' ? 'alle ratings' : ratingBand) + ')')}:</span>{result.suggestions.map(move => {
+                              let whiteToMove = true;
+                              try { whiteToMove = newGame(line.moves).turn() === 'w'; } catch { /* Use white-side scores only if the line cannot be replayed. */ }
+                              const wins = whiteToMove ? Number(move.white || 0) : Number(move.black || 0);
+                              const draws = Number(move.draws || 0);
+                              const losses = whiteToMove ? Number(move.black || 0) : Number(move.white || 0);
+                              const score = move.games ? Math.round((wins + draws / 2) / move.games * 100) : null;
+                              return <button key={move.uci} className="text-button" onClick={() => addCoverageSuggestion(line, move.san)} title={move.games.toLocaleString('nl-NL') + ' partijen · winst ' + wins.toLocaleString('nl-NL') + ' · remise ' + draws.toLocaleString('nl-NL') + ' · verlies ' + losses.toLocaleString('nl-NL')}>{move.san} · {move.games.toLocaleString('nl-NL')} · score {score === null ? '—' : score + '%'}</button>;
+                            })}</div> : !result.error ? <span>Geen vervolg met minimaal 20 partijen gevonden.</span> : null}
                             {coverageDetails?.missingMoves.length ? <span>Ontbrekende frequente zet: {coverageDetails.missingMoves[0].san} ({coverageDetails.missingMoves[0].games.toLocaleString('nl-NL')} partijen).</span> : null}
                           </div>
                           <span className={result.error || result.games === 0 ? 'coverage-status pending' : result.games <= positionGoal ? 'coverage-status done' : 'coverage-status extend'}>{result.error ? 'Niet gecontroleerd' : result.games === 0 ? 'Geen databasegegevens' : result.games <= positionGoal ? 'Diepte gehaald' : 'Voeg meer zetten toe'}</span>
