@@ -235,8 +235,8 @@ check(review.summary.includes('eerste afwijking bij 2... d6'), 'review maakt afw
 const coveredGame = analyzeGameAgainstRepertoire('1. e4 e5 2. Nf3 Nc6 3. Bc4', savedLines);
 equal(coveredGame.firstDeviation, null, 'een volledige match tot het einde van de partij heeft geen afwijking');
 check(coveredGame.summary.includes('Italiaans'), 'review herkent welke repertoirelijn gevolgd is');
-const uncoveredGame = analyzeGameAgainstRepertoire('1. d4 d5 2. c4', savedLines);
-equal(uncoveredGame.firstDeviation?.kind, 'gap', 'review onderscheidt ontbrekende dekking van een afwijking');
+const uncoveredGame = analyzeGameAgainstRepertoire('1. e4 e5 2. Nf3', [{ name: 'Korte lijn', color: 'Wit', moves: '1. e4 e5' }]);
+equal(uncoveredGame.firstDeviation?.kind, 'gap', 'review herkent wanneer een gespeelde voortzetting buiten de opgeslagen lijn valt');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
