@@ -4,7 +4,7 @@ import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, isDue, selec
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
-import { rankCoverageMoves } from '../src/study/coverage.mjs';
+import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
@@ -60,6 +60,19 @@ equal(evaluationLossCp(30, -70, 'w'), 100, 'wit verliest 1 pion bij evaluatiedal
 equal(evaluationLossCp(-30, 70, 'b'), 100, 'zwart verliest 1 pion wanneer wit-evaluatie van -0.30 naar +0.70 gaat');
 equal(evaluationLossCp(50, 10, 'b'), 0, 'zwart krijgt geen negatieve verlieswaarde als de gespeelde zet beter scoort');
 equal(evaluationLossCp(Number.NaN, 10, 'w'), null, 'ongeldige engine-evaluatie levert geen verlieswaarde op');
+
+// 0e. Rating/database coverage must be weighted by observed move frequency.
+const coverageSummary = summarizeCoverageMoves([
+  { san: 'e5', uci: 'e7e5', white: 60, draws: 20, black: 20 },
+  { san: 'c5', uci: 'c7c5', white: 30, draws: 20, black: 50 },
+  { san: 'e6', uci: 'e7e6', white: 5, draws: 5, black: 5 },
+], ['e5'], 20);
+equal(coverageSummary.totalGames, 200, 'dekking telt alleen zetten met voldoende partijen');
+equal(coverageSummary.coveredGames, 100, 'dekking telt alle partijen achter bekende zetten');
+equal(coverageSummary.weightedCoverage, 50, 'dekking wordt gewogen naar partijfrequentie');
+equal(coverageSummary.missingMoves.length, 1, 'ontbrekende vervolgen worden op bruikbare steekproef gefilterd');
+equal(coverageSummary.missingMoves[0].san, 'c5', 'meest relevante ontbrekende zet blijft beschikbaar');
+equal(summarizeCoverageMoves([], []).weightedCoverage, null, 'geen databasegegevens geven geen misleidend percentage');
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
