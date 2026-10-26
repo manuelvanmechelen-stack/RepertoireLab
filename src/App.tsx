@@ -1834,6 +1834,20 @@ function App() {
       setNotice('De variant moet minstens één zet bevatten.');
       return;
     }
+    // Use the same exact-path rule for manual PGN entry and board-created variants.
+    const signature = movePathSignature(candidate);
+    const duplicate = repertoireLines.find(line => {
+      try { return signatureFromPgn(line.moves) === signature; } catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setShowAdd(false);
+      setNewName('');
+      setNewNote('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
     const line: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
@@ -1893,7 +1907,7 @@ function App() {
       try {
         candidate.loadPgn(chunks[index]);
         if (!candidate.history().length) continue;
-        const signature = candidate.history().join(' ');
+        const signature = movePathSignature(candidate);
         if (existingSignatures.has(signature)) { duplicateCount++; continue; }
         existingSignatures.add(signature);
         const eventName = chunks[index].match(/\[Event\s+"([^"]+)"/)?.[1];
