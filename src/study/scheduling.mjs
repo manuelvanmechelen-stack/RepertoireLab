@@ -36,3 +36,40 @@ export function selectDueOwnPly(historyLength, color, moveMemory, lineId, lineDu
   }
   return 0;
 }
+
+/**
+ * Four-grade adaptive repetition schedule. This is a transparent SM-2-style
+ * scheduler, not a claim of implementing the FSRS algorithm.
+ */
+export function scheduleLineGrade(previous, grade, recentMoveMisses = 0, now = Date.now()) {
+  const seen = (previous?.seen ?? 0) + 1;
+  const priorInterval = Math.max(0, previous?.intervalDays ?? 0);
+  const hasRecentErrors = recentMoveMisses > 0;
+  let intervalDays;
+  let due;
+
+  if (grade === 'again') {
+    intervalDays = 0;
+    due = now + 5 * MINUTE_MS;
+  } else if (grade === 'hard') {
+    intervalDays = priorInterval > 0 ? Math.max(1, Math.round(priorInterval * 1.2)) : 1;
+    if (hasRecentErrors) intervalDays = Math.min(intervalDays, 1);
+    due = now + intervalDays * DAY_MS;
+  } else if (grade === 'good') {
+    intervalDays = priorInterval > 0
+      ? Math.round(priorInterval * (hasRecentErrors ? 1.3 : 1.8))
+      : seen <= 1 ? 1 : 3;
+    intervalDays = Math.min(120, Math.max(1, intervalDays));
+    due = now + intervalDays * DAY_MS;
+  } else if (grade === 'easy') {
+    intervalDays = priorInterval > 0
+      ? Math.round(priorInterval * (hasRecentErrors ? 1.8 : 2.5))
+      : 4;
+    intervalDays = Math.min(120, Math.max(1, intervalDays));
+    due = now + intervalDays * DAY_MS;
+  } else {
+    throw new Error('Onbekende trainingsbeoordeling: ' + grade);
+  }
+
+  return { seen, intervalDays, due, lastGrade: grade };
+}
