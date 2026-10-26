@@ -950,6 +950,7 @@ function App() {
   });
   const [coverage, setCoverage] = useState<Record<string, { games: number; error?: string; suggestions?: Array<ExplorerMove & { games: number }> }>>({});
   const [coverageLoading, setCoverageLoading] = useState(false);
+  const [coverageAutofillLoading, setCoverageAutofillLoading] = useState(false);
   const [qualityAudit, setQualityAudit] = useState<{ lineId: string; lineName: string; ply: number; san: string; severity: 'high' | 'medium'; message: string; games: number }[]>([]);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityAuditDone, setQualityAuditDone] = useState(false);
@@ -1188,6 +1189,93 @@ function App() {
       setNotice('Databasevervolg ' + san + ' toegevoegd aan ' + line.name + '. Controleer de variant voordat je deze leert.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Het databasevervolg kon niet worden toegevoegd.');
+    }
+  }
+
+  async function autoFillCoverageToGoal() {
+    if (!activeRepertoire || coverageAutofillLoading || coverageLoading) return;
+    const roots = repertoireLines
+      .map(line => ({ line, result: coverage[line.id] }))
+      .filter(item => item.result && !item.result.error && item.result.games > positionGoal && item.result.suggestions?.length);
+    if (!roots.length) {
+      setNotice('Controleer eerst de openingsdiepte. Er zijn geen gecontroleerde posities boven het frequentiedoel met bruikbare vervolgen.');
+      return;
+    }
+    setCoverageAutofillLoading(true);
+    const signatures = new Set<string>();
+    for (const existing of repertoireLines) {
+      try { signatures.add(newGame(existing.moves).history().join(' ')); } catch { /* Ignore malformed legacy lines. */ }
+    }
+    const additions: Line[] = [];
+    const nextCoverage: Record<string, { games: number; suggestions?: Array<ExplorerMove & { games: number }> }> = {};
+    const queue: Array<{ line: Line; games: number; depth: number; suggestions?: Array<ExplorerMove & { games: number }> }> =
+      roots.map(item => ({ line: item.line, games: item.result!.games, depth: 0, suggestions: item.result!.suggestions }));
+    let requests = 0;
+    let stoppedByLimit = false;
+    try {
+      while (queue.length && additions.length < 100 && requests < 80) {
+        const current = queue.shift()!;
+        if (current.games <= positionGoal || current.depth >= 8) continue;
+        let suggestions = current.suggestions;
+        if (!suggestions) {
+          try {
+            const position = newGame(current.line.moves);
+            const url = new URL('https://explorer.lichess.org/' + coverageSource);
+            url.searchParams.set('variant', 'standard');
+            url.searchParams.set('fen', position.fen());
+            url.searchParams.set('moves', '8');
+            url.searchParams.set('topGames', '0');
+            url.searchParams.set('recentGames', '0');
+            if (coverageSource === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
+            const response = await fetchExplorer(url);
+            requests++;
+            if (!response.ok) throw new Error(explorerHttpError(response.status));
+            const data = await response.json() as ExplorerResult;
+            const totalGames = (data.white || 0) + (data.draws || 0) + (data.black || 0);
+            suggestions = rankCoverageMoves(data.moves, 20, 8) as Array<ExplorerMove & { games: number }>;
+            nextCoverage[current.line.id] = { games: totalGames, suggestions };
+          } catch {
+            nextCoverage[current.line.id] = { games: current.games, suggestions: [] };
+            continue;
+          }
+        }
+        for (const suggestion of suggestions ?? []) {
+          if (additions.length >= 100) { stoppedByLimit = true; break; }
+          try {
+            const position = newGame(current.line.moves);
+            position.move(suggestion.san);
+            const signature = position.history().join(' ');
+            if (signatures.has(signature)) continue;
+            signatures.add(signature);
+            const addition: Line = {
+              id: crypto.randomUUID(),
+              repertoireId: current.line.repertoireId ?? activeRepertoireId,
+              name: current.line.name + ' — ' + suggestion.san,
+              color: current.line.color,
+              moves: position.pgn(),
+              tags: [...new Set([...current.line.tags, 'Database-vertakking', 'Automatisch aangevuld'])],
+              note: 'Automatisch aangevuld op basis van partijfrequentie uit ' + (coverageSource === 'masters' ? 'de Lichess-masterdatabase' : 'de Lichess-partijdatabase op ratingniveau ' + (ratingBand === 'all' ? 'alle ratings' : ratingBand)) + '. Het frequentiedoel bepaalt hoe diep de variant wordt uitgebreid; controleer de zetten en engine-evaluatie.',
+              due: 0,
+              seen: 0,
+            };
+            additions.push(addition);
+            nextCoverage[addition.id] = { games: suggestion.games, suggestions: [] };
+            if (suggestion.games > positionGoal && current.depth + 1 < 8) {
+              queue.push({ line: addition, games: suggestion.games, depth: current.depth + 1 });
+            }
+          } catch { /* Ignore illegal moves without discarding other branches. */ }
+        }
+      }
+      if (queue.length || additions.length >= 100 || requests >= 80) stoppedByLimit = true;
+      if (additions.length) {
+        setLines(previous => [...previous, ...additions]);
+        setCoverage(previous => ({ ...previous, ...nextCoverage }));
+      }
+      setNotice(additions.length
+        ? additions.length + ' vertakkingen automatisch toegevoegd tot het frequentiedoel van maximaal ' + positionGoal.toLocaleString('nl-NL') + ' partijen per eindstelling.' + (stoppedByLimit ? ' De veiligheidslimiet is bereikt; voer de controle opnieuw uit om verder aan te vullen.' : '')
+        : 'Geen nieuwe vertakkingen toegevoegd. Mogelijk zijn de relevante zetten al opgeslagen of is de database niet beschikbaar.');
+    } finally {
+      setCoverageAutofillLoading(false);
     }
   }
 
@@ -2655,7 +2743,8 @@ function App() {
                   </div>
                   <div className="coverage-results">
                     <div className="coverage-summary">Automatisch aanvullen voegt maximaal 100 nieuwe vertakkingen toe op basis van de zichtbare database-aanbevelingen. Het kiest geen engine-beste zet en breidt niet stilzwijgend verder uit dan deze gecontroleerde posities.</div>
-                    <button className="primary" onClick={addAllCoverageSuggestions} disabled={!activeRepertoire || coverageLoading || !Object.values(coverage).some(item => !item.error && item.suggestions?.length)}>Voeg alle voorgestelde vertakkingen toe</button>
+                    <button className="primary" onClick={autoFillCoverageToGoal} disabled={!activeRepertoire || coverageLoading || coverageAutofillLoading || !Object.values(coverage).some(item => !item.error && item.games > positionGoal && item.suggestions?.length)}>{coverageAutofillLoading ? 'Repertoire automatisch aanvullen…' : 'Vul repertoire automatisch aan tot frequentiedoel'}</button>
+                    <button className="secondary full-width" onClick={addAllCoverageSuggestions} disabled={!activeRepertoire || coverageLoading || coverageAutofillLoading || !Object.values(coverage).some(item => !item.error && item.suggestions?.length)}>Voeg alleen de getoonde vervolgen toe</button>
                     <div className="coverage-summary">
                       {Object.values(coverage).filter(item => !item.error && item.games > 0 && item.games <= positionGoal).length} van {repertoireLines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} partijen in {coverageSource === 'masters' ? 'de masterdatabase' : ('Lichess bij ratingniveau ' + (ratingBand === 'all' ? 'alle ratings' : ratingBand))}.
                     </div>
