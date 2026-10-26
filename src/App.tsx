@@ -48,6 +48,7 @@ type CloudEval = {
   pvs: Array<{ moves: string; cp?: number; mate?: number }>;
 };
 type Repertoire = { id: string; name: string; color: 'Wit' | 'Zwart'; createdAt: number };
+type GameReviewEntry = { summary: string; pgn?: string; deviationKind?: 'deviation' | 'gap' | null };
 type Line = {
   id: string;
   repertoireId?: string;
@@ -921,10 +922,10 @@ function App() {
   const [autofillLoading, setAutofillLoading] = useState(false);
   const [gameUsername, setGameUsername] = useState('');
   const [gameReviewLoading, setGameReviewLoading] = useState(false);
-  const [gameReview, setGameReview] = useState<string[]>([]);
+  const [gameReview, setGameReview] = useState<GameReviewEntry[]>([]);
   const [chessComUsername, setChessComUsername] = useState('');
   const [chessComReviewLoading, setChessComReviewLoading] = useState(false);
-  const [chessComReview, setChessComReview] = useState<string[]>([]);
+  const [chessComReview, setChessComReview] = useState<GameReviewEntry[]>([]);
   const [moveInput, setMoveInput] = useState('');
   const [evalResult, setEvalResult] = useState<CloudEval | null>(null);
   const [evalLoading, setEvalLoading] = useState(false);
@@ -1333,16 +1334,18 @@ function App() {
       if (!response.ok) throw new Error(response.status === 404 ? 'Lichess-gebruiker niet gevonden.' : 'Lichess gaf fout ' + response.status + '.');
       const pgnText = await response.text();
       const chunks = splitPgnCollection(pgnText);
-      const report: string[] = [];
+      const report: GameReviewEntry[] = [];
       for (const chunk of chunks.slice(0, 30)) {
         try {
           const analysis = analyzeGameAgainstRepertoire(chunk, lines);
-          report.push(analysis.summary);
+          const normalizedGame = new Chess();
+          normalizedGame.loadPgn(chunk);
+          report.push({ summary: analysis.summary, pgn: normalizedGame.pgn(), deviationKind: analysis.firstDeviation?.kind ?? null });
         } catch { /* Ignore an individual malformed game and continue the report. */ }
       }
-      setGameReview(report.length ? report : ['Geen leesbare partijen gevonden in de export.']);
+      setGameReview(report.length ? report : [{ summary: 'Geen leesbare partijen gevonden in de export.' }]);
     } catch (error) {
-      setGameReview([error instanceof Error ? error.message : 'Partijen konden niet worden gecontroleerd.']);
+      setGameReview([{ summary: error instanceof Error ? error.message : 'Partijen konden niet worden gecontroleerd.' }]);
     } finally {
       setGameReviewLoading(false);
     }
@@ -1362,21 +1365,67 @@ function App() {
       const gamesResponse = await fetch(archive);
       if (!gamesResponse.ok) throw new Error('De Chess.com-partijen konden niet worden opgehaald.');
       const gamesData = await gamesResponse.json() as { games?: Array<{ pgn?: string; end_time?: number; white?: { username?: string }; black?: { username?: string } }> };
-      const report: string[] = [];
+      const report: GameReviewEntry[] = [];
       const recent = [...(gamesData.games ?? [])].sort((a, b) => (b.end_time ?? 0) - (a.end_time ?? 0)).slice(0, 25);
       for (const item of recent) {
         if (!item.pgn) continue;
         try {
           const analysis = analyzeGameAgainstRepertoire(item.pgn, lines);
-          const date = analysis.summary;
-          report.push((item.end_time ? new Date(item.end_time * 1000).toLocaleDateString('nl-NL') + ' · ' : '') + date);
+          const normalizedGame = new Chess();
+          normalizedGame.loadPgn(item.pgn);
+          report.push({
+            summary: (item.end_time ? new Date(item.end_time * 1000).toLocaleDateString('nl-NL') + ' · ' : '') + analysis.summary,
+            pgn: normalizedGame.pgn(),
+            deviationKind: analysis.firstDeviation?.kind ?? null,
+          });
         } catch { /* Ignore an individual malformed game and continue the report. */ }
       }
-      setChessComReview(report.length ? report : ['Geen leesbare partijen in het meest recente openbare maandarchief.']);
+      setChessComReview(report.length ? report : [{ summary: 'Geen leesbare partijen in het meest recente openbare maandarchief.' }]);
     } catch (error) {
-      setChessComReview([error instanceof Error ? error.message : 'Chess.com-partijen konden niet worden gecontroleerd.']);
+      setChessComReview([{ summary: error instanceof Error ? error.message : 'Chess.com-partijen konden niet worden gecontroleerd.' }]);
     } finally {
       setChessComReviewLoading(false);
+    }
+  }
+
+  function saveReviewedGame(item: GameReviewEntry) {
+    if (!item.pgn) return;
+    if (!activeRepertoire) {
+      setNotice('Selecteer eerst het repertoire waarin je de partij wilt opslaan.');
+      return;
+    }
+    try {
+      const played = new Chess();
+      played.loadPgn(item.pgn);
+      const signature = played.history().join(' ');
+      if (!signature.length) throw new Error('De partij bevat geen zetten.');
+      const duplicate = repertoireLines.some(line => {
+        try { return newGame(line.moves).history().join(' ') === signature; } catch { return false; }
+      });
+      if (duplicate) {
+        setNotice('Deze partij staat al als volledige zetvolgorde in je repertoire.');
+        return;
+      }
+      const headers = played.header();
+      const white = headers.White ?? 'Wit';
+      const black = headers.Black ?? 'Zwart';
+      const addition: Line = {
+        id: crypto.randomUUID(),
+        repertoireId: activeRepertoireId,
+        name: (white + ' – ' + black).slice(0, 100),
+        color: activeRepertoire.color,
+        moves: played.pgn(),
+        tags: ['Uit eigen partij', 'Partijreview'],
+        note: item.deviationKind === 'gap'
+          ? 'Deze partij is toegevoegd vanuit de partijreview omdat het opgeslagen repertoire geen vervolg had. Analyseer de eerste afwijking en controleer de zetten met Stockfish voordat je de lijn leert.'
+          : 'Geïmporteerd uit een eigen partijreview. Controleer de kwaliteit van de zetten met Stockfish en voeg je strategische plan toe voordat je de lijn leert.',
+        due: 0,
+        seen: 0,
+      };
+      setLines(previous => [...previous, addition]);
+      setNotice('Partij opgeslagen als nieuwe trainingsvariant. Controleer de zetten en voeg je plan toe voordat je deze leert.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'De partij kon niet als variant worden opgeslagen.');
     }
   }
 
@@ -2431,12 +2480,12 @@ function App() {
                     <input aria-label="Lichess-gebruikersnaam" value={gameUsername} onChange={event => setGameUsername(event.target.value)} placeholder="Lichess-gebruikersnaam" />
                     <button className="primary" onClick={reviewLichessGames} disabled={gameReviewLoading || !gameUsername.trim()}>{gameReviewLoading ? 'Partijen controleren…' : 'Controleer partijen'}</button>
                   </div>
-                  {gameReview.length > 0 && <div className="coverage-results">{gameReview.map((item, index) => <div className="coverage-row" key={index}><span>{item}</span></div>)}</div>}
+                  {gameReview.length > 0 && <div className="coverage-results">{gameReview.map((item, index) => <div className="coverage-row" key={index}><div><span>{item.summary}</span>{item.pgn && <small>{item.deviationKind === 'gap' ? 'Ontbrekende repertoiredekking' : item.deviationKind === 'deviation' ? 'Afwijking van opgeslagen lijn' : 'Geen ontbrekend vervolg vastgesteld'}</small>}</div>{item.pgn && <button className="secondary" onClick={() => saveReviewedGame(item)}>Sla op als variant</button>}</div>)}</div>}
                   <div className="game-review-controls chesscom-review-controls">
                     <input aria-label="Chess.com-gebruikersnaam" value={chessComUsername} onChange={event => setChessComUsername(event.target.value)} placeholder="Chess.com-gebruikersnaam" />
                     <button className="secondary" onClick={reviewChessComGames} disabled={chessComReviewLoading || !chessComUsername.trim()}>{chessComReviewLoading ? 'Partijen controleren…' : 'Controleer Chess.com'}</button>
                   </div>
-                  {chessComReview.length > 0 && <div className="coverage-results">{chessComReview.map((item, index) => <div className="coverage-row" key={index}><span>{item}</span></div>)}</div>}
+                  {chessComReview.length > 0 && <div className="coverage-results">{chessComReview.map((item, index) => <div className="coverage-row" key={index}><div><span>{item.summary}</span>{item.pgn && <small>{item.deviationKind === 'gap' ? 'Ontbrekende repertoiredekking' : item.deviationKind === 'deviation' ? 'Afwijking van opgeslagen lijn' : 'Geen ontbrekend vervolg vastgesteld'}</small>}</div>{item.pgn && <button className="secondary" onClick={() => saveReviewedGame(item)}>Sla op als variant</button>}</div>)}</div>}
                 </div>
               </section>
               <div className="toolbar">
