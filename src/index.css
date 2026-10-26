@@ -1920,3 +1920,28 @@ textarea:focus-visible {
 .cloud-signed-in{display:flex;flex-direction:column;gap:10px}
 .cloud-signed-in>span,.cloud-sync-message{color:#c6c4d4;font-size:12px}
 @media(max-width:600px){.cloud-auth-fields{grid-template-columns:minmax(0,1fr)}.cloud-auth-fields .move-entry-actions{grid-column:auto}.cloud-signed-in .move-entry-actions,.cloud-auth-fields .move-entry-actions{flex-wrap:wrap}.cloud-signed-in .move-entry-actions button,.cloud-auth-fields .move-entry-actions button{flex:1 1 140px}}
+
+.coverage-suggestions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+.coverage-suggestions > span {
+  flex-basis: 100%;
+}
+.coverage-suggestions .text-button {
+  border: 1px solid #3b3850;
+  border-radius: 7px;
+  background: #211f2b;
+  color: #c8bfff;
+  padding: 6px 9px;
+  text-align: left;
+}
+.coverage-suggestions .text-button:hover {
+  background: #302a43;
+}
+@media (max-width: 700px) {
+  .coverage-suggestions .text-button { flex: 1 1 100%; }
+}
