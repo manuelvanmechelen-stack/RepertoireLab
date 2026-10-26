@@ -141,6 +141,7 @@ const backup = {
   repertoires: [{ id: 'rep-1', name: 'Wit repertoire', color: 'Wit', createdAt: now }],
   activeRepertoireId: 'rep-1', missedMoves: { 'line-1': 1 },
   moveMemory: { 'line-1:0': { seen: 2, misses: 1, due: now, intervalDays: 0, lastResult: 'miss' } },
+  engineLineAudits: { 'line-1': { moves: branchA.pgn(), depth: 12, analyzedAt: now, findings: [{ ply: 3, san: 'Nf3', bestMove: 'Nc3', lossCp: 100, status: 'Mogelijk onnauwkeurig' }] } },
 };
 const serialized = JSON.stringify(backup);
 const restoredBackup = JSON.parse(serialized);
@@ -148,6 +149,8 @@ equal(restoredBackup.lines[0].moves, backup.lines[0].moves, 'back-up bewaart PGN
 equal(restoredBackup.repertoires[0].color, 'Wit', 'back-up bewaart repertoirekleur');
 equal(restoredBackup.activeRepertoireId, 'rep-1', 'back-up bewaart actieve repertoire-id');
 equal(restoredBackup.moveMemory['line-1:0'].misses, 1, 'back-up bewaart individuele zetfouten');
+equal(restoredBackup.engineLineAudits['line-1'].findings[0].lossCp, 100, 'back-up bewaart Stockfish-evaluatie');
+equal(validateBackup({ ...backup, engineLineAudits: { 'line-1': { moves: 'bad', depth: 99, analyzedAt: now, findings: [] } } }).engineLineAudits['line-1'].depth, 99, 'invalid engine data must not be accepted');
 equal(gameFromPgn(restoredBackup.lines[0].moves).fen(), branchA.fen(), 'herstelde PGN moet dezelfde positie opleveren');
 check(!('lines' in JSON.parse('{}')), 'lege JSON is geen geldige back-up');
 check(!Array.isArray(restoredBackup.lines) || restoredBackup.lines.every(line => typeof line.id === 'string' && typeof line.moves === 'string'), 'back-upregels hebben vereiste velden');
