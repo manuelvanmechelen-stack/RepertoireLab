@@ -47,7 +47,20 @@ export function validateBackup(raw) {
     (entry.lastResult === undefined || entry.lastResult === 'good' || entry.lastResult === 'miss'));
   if (raw.missedMoves !== undefined && !validCounterMap(raw.missedMoves)) throw new Error('De foutenteller in deze back-up is ongeldig.');
   if (raw.moveMemory !== undefined && !validMemoryMap(raw.moveMemory)) throw new Error('De herhalingsgegevens in deze back-up zijn ongeldig.');
+  const validEngineAuditMap = value => isRecord(value) && Object.entries(value).every(([key, audit]) =>
+    key.length > 0 && isRecord(audit) && typeof audit.moves === 'string' &&
+    Number.isInteger(audit.depth) && audit.depth >= 1 && audit.depth <= 30 &&
+    Number.isFinite(audit.analyzedAt) && audit.analyzedAt >= 0 &&
+    Array.isArray(audit.findings) && audit.findings.length <= 10 &&
+    audit.findings.every(item => isRecord(item) && Number.isInteger(item.ply) && item.ply >= 1 &&
+      typeof item.san === 'string' && typeof item.bestMove === 'string' && typeof item.status === 'string' &&
+      (item.lossCp === null || (typeof item.lossCp === 'number' && Number.isFinite(item.lossCp) && item.lossCp >= 0))));
+  if (raw.engineLineAudits !== undefined && !validEngineAuditMap(raw.engineLineAudits)) throw new Error('De opgeslagen Stockfish-analyses in deze back-up zijn ongeldig.');
   const activeRepertoireId = typeof raw.activeRepertoireId === 'string' && repertoires.some(item => item.id === raw.activeRepertoireId)
     ? raw.activeRepertoireId : repertoires[0]?.id ?? '';
-  return { lines, repertoires, activeRepertoireId, missedMoves: raw.missedMoves ?? {}, moveMemory: raw.moveMemory ?? {} };
+  return {
+    lines, repertoires, activeRepertoireId,
+    missedMoves: raw.missedMoves ?? {}, moveMemory: raw.moveMemory ?? {},
+    engineLineAudits: raw.engineLineAudits ?? {},
+  };
 }
