@@ -1733,7 +1733,7 @@ function App() {
     setNotice(imported.length + (imported.length === 1 ? ' variant geïmporteerd.' : ' varianten geïmporteerd.'));
   }
   function exportBackup() {
-    const backup = { app: 'RepertoireLab', version: 2, exportedAt: new Date().toISOString(), lines, repertoires, activeRepertoireId, missedMoves, moveMemory };
+    const backup = { app: 'RepertoireLab', version: 2, exportedAt: new Date().toISOString(), lines, repertoires, activeRepertoireId, missedMoves, moveMemory, engineLineAudits };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
     a.download = 'repertoirelab-back-up-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
@@ -1744,7 +1744,7 @@ function App() {
     const validated = validateBackup(raw);
     if (askConfirmation && !window.confirm('De huidige gegevens vervangen door deze back-up? Exporteer eerst een back-up om gegevens te bewaren.')) return false;
     setLines(validated.lines); setRepertoires(validated.repertoires); setActiveRepertoireId(validated.activeRepertoireId);
-    setMissedMoves(validated.missedMoves); setMoveMemory(validated.moveMemory);
+    setMissedMoves(validated.missedMoves); setMoveMemory(validated.moveMemory); setEngineLineAudits(validated.engineLineAudits);
     setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up volledig gecontroleerd en teruggezet.');
     return true;
   }
@@ -2429,7 +2429,7 @@ function App() {
                 <div className="builder-actions"><div className="builder-side"><strong>Back-up en herstel</strong><span>Exporteer alle repertoires en trainingsgegevens. De gegevens staan lokaal in deze browser en kunnen verloren gaan bij het wissen van browserdata.</span><div className="move-entry-actions"><button className="primary" onClick={exportBackup}><Download size={15} /> Volledige back-up exporteren</button><label className="secondary file-restore-label">Back-up terugzetten <input type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) void restoreBackup(file); event.currentTarget.value = ''; }} /></label></div></div></div>
               </section>
               <CloudSyncPanel
-                backup={{ app: 'RepertoireLab', version: 2, exportedAt: new Date().toISOString(), lines, repertoires, activeRepertoireId, missedMoves, moveMemory }}
+                backup={{ app: 'RepertoireLab', version: 2, exportedAt: new Date().toISOString(), lines, repertoires, activeRepertoireId, missedMoves, moveMemory, engineLineAudits }}
                 onRestore={(raw) => { restoreBackupData(raw, false); }}
               />
               <section className="repertoire-builder">
