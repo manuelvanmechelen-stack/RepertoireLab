@@ -250,6 +250,10 @@ check(splitCollection[0].includes('Game one') && splitCollection[1].includes('Ga
 equal(splitPgnCollection('   ').length, 0, 'lege PGN levert geen partijen op');
 equal(splitPgnCollection('1. e4 e5').length, 1, 'PGN zonder Event-header blijft één invoer');
 equal(splitPgnCollection(gameOne).length, 1, 'één PGN-partij blijft één invoer');
+const noEventCollection = '1. e4 e5 2. Nf3 Nc6 1-0\n[Site "Club"]\n[White "A"]\n[Black "B"]\n\n1. d4 d5 0-1';
+equal(splitPgnCollection(noEventCollection).length, 2, 'PGN zonder Event-tags wordt op voltooide partijgrens gesplitst');
+check(splitPgnCollection(noEventCollection)[1].includes('[White "A"]'), 'splitsen zonder Event behoudt de volgende partijheaders');
+equal(splitPgnCollection('[Event "Eén"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *').length, 1, 'meerdere headers binnen één partij worden niet gesplitst');
 
 // 11. Exercise the exact backup validator used by the restore UI.
 const checkedBackup = validateBackup(backup);
