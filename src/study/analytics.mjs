@@ -55,5 +55,9 @@ export function calculateRepertoireMetrics(lines = [], moveMemory = {}, now = Da
     totalMisses,
     accuracy: totalAttempts ? Math.round((totalAttempts - totalMisses) / totalAttempts * 100) : null,
     dueMoves,
+    engineAuditMoves: currentAudits.length,
+    engineComparableMoves: comparableAudits.length,
+    engineConsistency,
+    engineOutliers,
   };
 }
