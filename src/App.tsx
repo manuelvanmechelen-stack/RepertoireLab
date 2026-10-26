@@ -10,6 +10,7 @@ import { calculateRepertoireMetrics } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
+import { evaluationLossCp } from './study/engineAudit.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
   BarChart3,
@@ -2120,9 +2121,7 @@ function App() {
           } else if (!playedPv) {
             status = 'Niet in top 5 — exact evaluatieverlies onbekend';
           } else {
-            const bestForMover = move.color === 'w' ? cpScore(bestPv ?? {}) : -cpScore(bestPv ?? {});
-            const playedForMover = move.color === 'w' ? cpScore(playedPv) : -cpScore(playedPv);
-            lossCp = Math.max(0, bestForMover - playedForMover);
+            lossCp = evaluationLossCp(cpScore(bestPv ?? {}), cpScore(playedPv), move.color);
             status = lossCp >= 200 ? 'Grote evaluatieafwijking — controleer tactiek' : lossCp >= 80 ? 'Mogelijk onnauwkeurig — nader bekijken' : 'Kleine evaluatieafwijking';
           }
           findings.push({ ply: index + 1, san: move.san, bestMove: sanForUci(bestUci), lossCp, status });
