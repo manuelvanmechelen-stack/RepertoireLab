@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
-import { scheduleMoveResult, scheduleLineResult, selectDueOwnPly } from './study/scheduling.mjs';
+import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, selectDueOwnPly, type LineGrade } from './study/scheduling.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
@@ -1718,16 +1718,15 @@ function App() {
     } catch { setTrainingSelected(null); }
   }
   function resetMoveTraining() { setTrainingPly(0); setTrainingInput(''); setTrainingFeedback(''); setTrainingComplete(false); setTrainingSelected(null); setTrainingBoardFen('start'); if (review) prepareBoardTraining(review); }
-  function trainResult(remembered: boolean) {
+  function trainResult(grade: LineGrade) {
     if (!review) return;
+    const remembered = grade !== 'again';
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
     const recentMoveMisses = Object.entries(moveMemory).filter(([key, item]) => key.startsWith(review.id + ':') && item.lastResult === 'miss' && item.due > Date.now() - 7 * 86400000).length;
-    const scheduled = scheduleLineResult(review, remembered, recentMoveMisses);
-    const nextSeen = scheduled.seen;
-    const intervalDays = scheduled.intervalDays;
-    const nextDue = scheduled.due;
+    const scheduled = scheduleLineGrade(review, grade, recentMoveMisses);
+    const { seen: nextSeen, intervalDays, due: nextDue } = scheduled;
     setLines(prev => prev.map(line => line.id === review.id ? {
-      ...line, seen: nextSeen, due: nextDue, intervalDays: remembered ? intervalDays : 0,
+      ...line, seen: nextSeen, due: nextDue, intervalDays,
       tags: remembered
         ? [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Opnieuw oefenen'), 'Herhaling actief'])]
         : [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Herhaling actief'), 'Opnieuw oefenen'])],
@@ -1735,9 +1734,11 @@ function App() {
     setDueIds(prev => prev.filter(id => id !== review.id));
     setRevealed(false);
     setReviewIndex(0);
-    setNotice(
-      remembered ? 'Goed. Deze variant komt over ongeveer ' + Math.round(intervalDays) + ' dag(en) terug.' : 'Deze variant komt over 5 minuten opnieuw terug.'
-    );
+    const timing = grade === 'again'
+      ? 'over 5 minuten'
+      : intervalDays === 1 ? 'over 1 dag' : 'over ' + intervalDays + ' dagen';
+    const gradeLabel: Record<LineGrade, string> = { again: 'Opnieuw', hard: 'Moeilijk', good: 'Goed', easy: 'Makkelijk' };
+    setNotice(gradeLabel[grade] + ': deze variant komt ' + timing + ' terug.');
   }
   function loadFen() {
     const candidate = new Chess();
@@ -3062,19 +3063,11 @@ function App() {
                       {revealed ? 'Verberg antwoord' : 'Toon zetten en plan'}
                     </button>
                     {revealed && (
-                      <div className="grade-row">
-                        <button
-                          className="grade-again"
-                          onClick={() => trainResult(false)}
-                        >
-                          Nog niet goed
-                        </button>
-                        <button
-                          className="grade-good"
-                          onClick={() => trainResult(true)}
-                        >
-                          Ik wist het
-                        </button>
+                      <div className="grade-row" aria-label="Beoordeel hoe goed je de variant kende">
+                        <button className="grade-again" onClick={() => trainResult('again')} title="Opnieuw over 5 minuten">Opnieuw</button>
+                        <button className="grade-hard" onClick={() => trainResult('hard')} title="Korte herhaling">Moeilijk</button>
+                        <button className="grade-good" onClick={() => trainResult('good')} title="Normale herhaling">Goed</button>
+                        <button className="grade-easy" onClick={() => trainResult('easy')} title="Langere herhaling">Makkelijk</button>
                       </div>
                     )}
                   </div>
