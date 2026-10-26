@@ -6,6 +6,7 @@ import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves } from './study/coverage.mjs';
+import { calculateRepertoireMetrics } from './study/analytics.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
   BarChart3,
@@ -1038,6 +1039,7 @@ function App() {
     [repertoireLines, query, colorFilter]
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
+  const repertoireMetrics = useMemo(() => calculateRepertoireMetrics(lines, moveMemory), [lines, moveMemory]);
   const trainingHealth = useMemo(() => {
     const ownMoves = Object.entries(moveMemory).filter(([key]) => lines.some(line => key.startsWith(line.id + ':')));
     const moveAttempts = ownMoves.reduce((sum, [, item]) => sum + item.seen, 0);
@@ -2227,6 +2229,37 @@ function App() {
                   <span>Training</span>
                   <strong>{lines.length ? 'Klaar' : '—'}</strong>
                   <small>kies een variant om te starten</small>
+                </div>
+              </section>
+              <section className="study-focus-panel repertoire-health-panel">
+                <div className="study-focus-heading">
+                  <div>
+                    <div className="eyebrow">REPERTOIREKWALITEIT</div>
+                    <h2>Controleer je voorbereiding</h2>
+                    <p>Meetbare gegevens uit je opgeslagen lijnen en zettraining. Enginekwaliteit en praktische resultaten worden niet gegokt: die vereisen analyse of partijdata.</p>
+                  </div>
+                  <div className="study-accuracy">
+                    <strong>{repertoireMetrics.accuracy === null ? '—' : repertoireMetrics.accuracy + '%'}</strong>
+                    <span>trainingsnauwkeurigheid</span>
+                  </div>
+                </div>
+                <div className="study-focus-metrics">
+                  <div><span>Geldige varianten</span><strong>{repertoireMetrics.validLines}</strong></div>
+                  <div><span>Unieke stellingen</span><strong>{repertoireMetrics.uniquePositions}</strong></div>
+                  <div><span>Vertakkingspunten</span><strong>{repertoireMetrics.branchingPositions}</strong></div>
+                  <div><span>Zetten geoefend</span><strong>{repertoireMetrics.totalAttempts}</strong></div>
+                  <div><span>Fouten geregistreerd</span><strong>{repertoireMetrics.totalMisses}</strong></div>
+                  <div><span>Vervallen zetten</span><strong>{repertoireMetrics.dueMoves}</strong></div>
+                  <div><span>Varianten met plan</span><strong>{repertoireMetrics.noteCoverage === null ? '—' : repertoireMetrics.noteCoverage + '%'}</strong></div>
+                  <div><span>Plannotities</span><strong>{repertoireMetrics.notedLines}/{repertoireMetrics.validLines}</strong></div>
+                </div>
+                <div className="study-focus-actions">
+                  <button className="primary" onClick={() => { setTab('repertoire'); setShowTranspositions(true); }}>Controleer repertoirestructuur</button>
+                  <button className="secondary" onClick={() => { setTab('trainen'); setDueIds([]); setReviewIndex(0); setRevealed(false); }}>Train zwakke zetten</button>
+                </div>
+                <div className="study-empty">
+                  <strong>Wat nog aparte controle vraagt</strong>
+                  <p>Gebruik Stockfish in de stellinganalyse om zetten inhoudelijk te beoordelen. De partijreview detecteert repertoire-afwijkingen, maar noemt een zet niet automatisch slecht. Praktische effectiviteit kan pas betrouwbaar worden berekend uit voldoende geïmporteerde partijen met bekende uitslagen.</p>
                 </div>
               </section>
               <section className="study-focus-panel">
