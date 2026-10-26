@@ -46,6 +46,13 @@ equal(scotchPrefix?.eco, 'C20', 'kortere lijn krijgt een bredere offline opening
 check(scotchPrefix?.exact === false, 'onvolledige opening krijgt voorlopige herkenning');
 equal(identifyOpening('ongeldige PGN'), null, 'ongeldige PGN geeft geen opening');
 check(listOpeningCatalog().length >= 35, 'offline catalogus bevat een bruikbare basisset');
+check(listOpeningCatalog().length >= 3800, 'offline catalogus bevat de volledige Lichess ECO-basisset');
+const najdorfOpening = identifyOpening('1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6');
+equal(najdorfOpening?.eco, 'B90', 'Najdorf wordt offline herkend met de verwachte ECO-code');
+check(najdorfOpening?.name.toLowerCase().includes('najdorf'), 'Najdorf-herkenning bevat de openingsnaam');
+const catalanOpening = identifyOpening('1. d4 Nf6 2. c4 e6 3. g3');
+check(catalanOpening?.name.toLowerCase().includes('catalan') || catalanOpening?.name.toLowerCase().includes('catalaans'), 'Catalaans wordt offline herkend');
+
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
