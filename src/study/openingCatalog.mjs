@@ -54,7 +54,7 @@ const parsePgnMoves = pgn => String(pgn ?? '')
   .replace(/\{[^}]*\}/g, ' ')
   .replace(/;[^\n]*/g, ' ')
   .split(/\s+/)
-  .filter(token => token && !/^\d+\.(?:\.\.)?$/.test(token) && !/^(?:1-0|0-1|1\\/2-1\\/2|\\*)$/.test(token))
+  .filter(token => token && !/^\d+\.(?:\.\.)?$/.test(token) && !/^(?:1-0|0-1|1\/2-1\/2|\*)$/.test(token))
   .map(NORMALIZE);
 
 // Lichess's CC0 ECO dataset supplies broad offline coverage. Hand-picked entries
