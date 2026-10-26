@@ -6,7 +6,7 @@ import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
-import { calculateRepertoireMetrics } from './study/analytics.mjs';
+import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
@@ -948,7 +948,7 @@ function App() {
     const saved = Number(localStorage.getItem('repertoirelab-position-goal-v1'));
     return Number.isFinite(saved) && saved >= 1 ? saved : 1000;
   });
-  const [coverage, setCoverage] = useState<Record<string, { games: number; error?: string; suggestions?: Array<ExplorerMove & { games: number }> }>>({});
+  const [coverage, setCoverage] = useState<Record<string, { games: number; white?: number; draws?: number; black?: number; source?: string; ratingBand?: string; error?: string; suggestions?: Array<ExplorerMove & { games: number }> }>>(() => { try { return JSON.parse(localStorage.getItem('repertoirelab-coverage-cache-v1') ?? '{}'); } catch { return {}; } });
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [coverageAutofillLoading, setCoverageAutofillLoading] = useState(false);
   const [qualityAudit, setQualityAudit] = useState<{ lineId: string; lineName: string; ply: number; san: string; severity: 'high' | 'medium'; message: string; games: number }[]>([]);
@@ -1013,6 +1013,7 @@ function App() {
     localStorage.setItem('repertoirelab-missed-moves-v1', JSON.stringify(missedMoves));
   }, [missedMoves]);
   useEffect(() => { localStorage.setItem('repertoirelab-move-memory-v1', JSON.stringify(moveMemory)); }, [moveMemory]);
+  useEffect(() => { localStorage.setItem('repertoirelab-coverage-cache-v1', JSON.stringify(coverage)); }, [coverage]);
   useEffect(() => { localStorage.setItem('repertoirelab-daily-training-v1', JSON.stringify(dailyTraining)); }, [dailyTraining]);
   useEffect(() => { localStorage.setItem('repertoirelab-daily-training-goal-v1', String(dailyTrainingGoal)); }, [dailyTrainingGoal]);
   useEffect(() => { localStorage.setItem('repertoirelab-engine-line-audits-v1', JSON.stringify(engineLineAudits)); }, [engineLineAudits]);
@@ -1070,6 +1071,7 @@ function App() {
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
   const repertoireMetrics = useMemo(() => calculateRepertoireMetrics(lines, moveMemory, Date.now(), engineLineAudits), [lines, moveMemory, engineLineAudits]);
+  const repertoireQuality = useMemo(() => calculateRepertoireQuality(repertoireLines, moveMemory, engineLineAudits, coverage), [repertoireLines, moveMemory, engineLineAudits, coverage]);
   const repertoireTree = useMemo(() => buildRepertoireTree(repertoireLines), [repertoireLines]);
   const treePositionMoves = getRepertoireContinuations(repertoireTree, game.fen());
   const trainingHealth = useMemo(() => {
@@ -1129,7 +1131,7 @@ function App() {
     if (coverageLoading || !repertoireLines.length) return;
     setCoverageLoading(true);
     setCoverage({});
-    const results: Record<string, { games: number; error?: string; suggestions?: Array<ExplorerMove & { games: number }> }> = {};
+    const results: Record<string, { games: number; white?: number; draws?: number; black?: number; source?: string; ratingBand?: string; error?: string; suggestions?: Array<ExplorerMove & { games: number }> }> = {};
     try {
       for (const line of repertoireLines) {
         try {
@@ -1146,7 +1148,7 @@ function App() {
           const data = await response.json() as ExplorerResult;
           const totalGames = (data.white || 0) + (data.draws || 0) + (data.black || 0);
           const suggestions = rankCoverageMoves(data.moves, 20, 8) as Array<ExplorerMove & { games: number }>;
-          results[line.id] = { games: totalGames, suggestions };
+          results[line.id] = { games: totalGames, white: data.white || 0, draws: data.draws || 0, black: data.black || 0, source: coverageSource, ratingBand, suggestions };
         } catch (error) {
           results[line.id] = { games: 0, error: error instanceof Error ? error.message : 'Database niet bereikbaar' };
         }
@@ -2484,6 +2486,11 @@ function App() {
                   </div>
                 </div>
                 <div className="study-focus-metrics">
+                  <div><span>Effectiviteit · database</span><strong>{repertoireQuality.effectivenessScore === null ? '—' : repertoireQuality.effectivenessScore + '/99'}</strong><small>{repertoireQuality.effectivenessScore === null ? 'Haal eerst dekking op' : repertoireQuality.practicalRate + '% verwacht resultaat · ' + repertoireQuality.effectivenessGames + ' gewogen partijen · ' + repertoireQuality.confidence.effectiveness + ' zekerheid'}</small></div>
+                  <div><span>Soundness · Stockfish</span><strong>{repertoireQuality.soundnessScore === null ? '—' : repertoireQuality.soundnessScore + '/99'}</strong><small>{repertoireQuality.soundnessScore === null ? 'Analyseer varianten met Stockfish' : 'Gemiddeld verlies ' + repertoireQuality.averageLossCp + ' cp · ' + repertoireQuality.auditedMoves + ' zetten · ' + repertoireQuality.confidence.soundness + ' zekerheid'}</small></div>
+                  <div><span>Leerbaarheid · schatting</span><strong>{repertoireQuality.learnabilityScore === null ? '—' : repertoireQuality.learnabilityScore + '/99'}</strong><small>{repertoireQuality.recallRate === null ? 'Structuurinschatting; train voor een persoonlijke score' : repertoireQuality.recallRate + '% herinnerd · ' + repertoireQuality.reviewAttempts + ' pogingen · ' + repertoireQuality.confidence.learnability + ' zekerheid'}</small></div>
+                </div>
+                <div className="study-focus-metrics">
                   <div><span>Geldige varianten</span><strong>{repertoireMetrics.validLines}</strong></div>
                   <div><span>Unieke stellingen</span><strong>{repertoireMetrics.uniquePositions}</strong></div>
                   <div><span>Vertakkingspunten</span><strong>{repertoireMetrics.branchingPositions}</strong></div>
@@ -2502,7 +2509,7 @@ function App() {
                 </div>
                 <div className="study-empty">
                   <strong>Wat nog aparte controle vraagt</strong>
-                  <p>De engineconsistentie is een beperkte top-vijf-screening, geen volledige engine-rating. De partijreview detecteert repertoire-afwijkingen, maar noemt een zet niet automatisch slecht. Praktische effectiviteit kan pas betrouwbaar worden berekend uit voldoende geïmporteerde partijen met bekende uitslagen.</p>
+                  <p>De engineconsistentie is een beperkte top-vijf-screening, geen volledige engine-rating. De partijreview detecteert repertoire-afwijkingen, maar noemt een zet niet automatisch slecht. De drie scores zijn transparante lokale schattingen, niet de proprietary Chessbook-scores. Effectiviteit gebruikt opgeslagen Lichess-database-uitkomsten, Soundness alleen actuele Stockfish-screenings en Leerbaarheid combineert jouw fouten met lijnlengte/vertakkingen.</p>
                 </div>
               </section>
               <section className="study-focus-panel">
