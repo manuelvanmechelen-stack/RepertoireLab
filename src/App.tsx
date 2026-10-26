@@ -1702,11 +1702,20 @@ function App() {
       return;
     }
     const imported: Line[] = [];
+    const existingSignatures = new Set(lines
+      .filter(line => line.repertoireId === activeRepertoire.id)
+      .flatMap(line => {
+        try { return [newGame(line.moves).history().join(' ')]; } catch { return []; }
+      }));
+    let duplicateCount = 0;
     for (let index = 0; index < chunks.length; index++) {
       const candidate = new Chess();
       try {
         candidate.loadPgn(chunks[index]);
         if (!candidate.history().length) continue;
+        const signature = candidate.history().join(' ');
+        if (existingSignatures.has(signature)) { duplicateCount++; continue; }
+        existingSignatures.add(signature);
         const eventName = chunks[index].match(/\[Event\s+"([^"]+)"/)?.[1];
         imported.push({
           id: crypto.randomUUID(),
@@ -1725,7 +1734,7 @@ function App() {
       }
     }
     if (!imported.length) {
-      setNotice('Geen geldige zetten gevonden in deze PGN.');
+      setNotice(duplicateCount ? 'Geen nieuwe varianten geïmporteerd: ' + duplicateCount + ' exacte duplicaat/duplicaten overgeslagen.' : 'Geen geldige zetten gevonden in deze PGN.');
       return;
     }
     setLines(previous => [...imported, ...previous]);
@@ -1733,7 +1742,7 @@ function App() {
     setGame(newGame(imported[0].moves));
     setShowPgn(false);
     setPgnInput('');
-    setNotice(imported.length + (imported.length === 1 ? ' variant geïmporteerd.' : ' varianten geïmporteerd.'));
+    setNotice(imported.length + (imported.length === 1 ? ' variant geïmporteerd' : ' varianten geïmporteerd') + (duplicateCount ? '; ' + duplicateCount + ' exacte duplicaat/duplicaten overgeslagen.' : '.'));
   }
   function exportBackup() {
     const backup = { app: 'RepertoireLab', version: 2, exportedAt: new Date().toISOString(), lines, repertoires, activeRepertoireId, missedMoves, moveMemory, engineLineAudits };
