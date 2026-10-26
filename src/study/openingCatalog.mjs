@@ -1,9 +1,8 @@
 import { Chess } from 'chess.js';
 import { LICHESS_OPENINGS } from './lichessOpenings.mjs';
 
-// Compact offline ECO recognition catalogue. Move sequences are replayed by chess.js;
-// only a position reached by the supplied line can match. Online Explorer remains
-// the source for broad statistics and full ECO coverage.
+// Offline ECO recognition uses move sequences from the CC0 Lichess dataset,
+// supplemented by a small set of curated Dutch labels. Online Explorer adds live statistics.
 const OPENINGS = [
   ['C45','Schots (Scotch Game)','1. e4 e5 2. Nf3 Nc6 3. d4'],
   ['C45','Schots – hoofdvariant','1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4'],
