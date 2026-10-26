@@ -5,7 +5,7 @@ import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, selectDueOwn
 import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
-import { rankCoverageMoves } from './study/coverage.mjs';
+import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
@@ -929,6 +929,7 @@ function App() {
   const [explorerFen, setExplorerFen] = useState('');
   const [explorerSource, setExplorerSource] = useState<'masters' | 'lichess'>('lichess');
   const [ratingBand, setRatingBand] = useState('1800');
+  const [coverageSource, setCoverageSource] = useState<'masters' | 'lichess'>('lichess');
   const [explorerToken, setExplorerToken] = useState(() => localStorage.getItem('repertoirelab-lichess-token-v1') ?? '');
   const [autofillLoading, setAutofillLoading] = useState(false);
   const [gameUsername, setGameUsername] = useState('');
@@ -1132,17 +1133,18 @@ function App() {
       for (const line of repertoireLines) {
         try {
           const position = newGame(line.moves);
-          const url = new URL('https://explorer.lichess.org/masters');
+          const url = new URL('https://explorer.lichess.org/' + coverageSource);
           url.searchParams.set('variant', 'standard');
           url.searchParams.set('fen', position.fen());
           url.searchParams.set('moves', '8');
           url.searchParams.set('topGames', '0');
           url.searchParams.set('recentGames', '0');
+          if (coverageSource === 'lichess' && ratingBand !== 'all') url.searchParams.set('ratings', ratingBand);
           const response = await fetchExplorer(url);
           if (!response.ok) throw new Error(explorerHttpError(response.status));
           const data = await response.json() as ExplorerResult;
           const totalGames = (data.white || 0) + (data.draws || 0) + (data.black || 0);
-          const suggestions = rankCoverageMoves(data.moves) as Array<ExplorerMove & { games: number }>;
+          const suggestions = rankCoverageMoves(data.moves, 20, 8) as Array<ExplorerMove & { games: number }>;
           results[line.id] = { games: totalGames, suggestions };
         } catch (error) {
           results[line.id] = { games: 0, error: error instanceof Error ? error.message : 'Database niet bereikbaar' };
@@ -2551,11 +2553,18 @@ function App() {
                     <p>Filtert Lichess-partijstatistieken op de gekozen ratinggroep; masterpartijen gebruiken hun eigen selectie.</p>
                   </div>
                   <label>
-                    Doel: maximaal aantal masterpartijen voor de eindstelling
+                    Database voor dekking
+                    <select value={coverageSource} onChange={event => setCoverageSource(event.target.value as 'masters' | 'lichess')}>
+                      <option value="lichess">Lichess-partijen op gekozen ratingniveau</option>
+                      <option value="masters">Masterpartijen</option>
+                    </select>
+                  </label>
+                  <label>
+                    Doel: maximaal aantal partijen voor de eindstelling
                     <input type="number" min="1" max="1000000" value={positionGoal} onChange={event => setPositionGoal(Math.max(1, Math.min(1000000, Number(event.target.value) || 1)))} />
                   </label>
                   <div>
-                    <p>Controleer hoe vaak de eindstelling van elke opgeslagen lijn voorkomt in de Lichess-masterdatabase. Als een stelling vaker voorkomt dan je doel, voeg dan meer zetten toe en controleer opnieuw. Het doel wordt op dit apparaat bewaard.</p>
+                    <p>Controleer hoe vaak de eindstelling van elke opgeslagen lijn voorkomt in de gekozen database. Bij Lichess-partijen wordt het gekozen ratingniveau gebruikt; masterpartijen hebben hun eigen selectie. Een lage frequentie is een praktische dieptemaat, geen bewijs dat alle mogelijke tegenzetten zijn afgedekt.</p>
                     <button className="primary" onClick={checkRepertoireCoverage} disabled={coverageLoading || !repertoireLines.length}>{coverageLoading ? 'Database controleren…' : 'Controleer openingsdiepte'}</button>
                   </div>
                   <div>
@@ -2601,14 +2610,35 @@ function App() {
                   </div>
                   <div className="coverage-results">
                     <div className="coverage-summary">
-                      {Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length} van {repertoireLines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} masterpartijen.
+                      {Object.values(coverage).filter(item => !item.error && item.games <= positionGoal).length} van {repertoireLines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} partijen in {coverageSource === 'masters' ? 'de masterdatabase' : ('Lichess bij ratingniveau ' + (ratingBand === 'all' ? 'alle ratings' : ratingBand))}.
                     </div>
                     {repertoireLines.filter(line => coverage[line.id]).map(line => {
                       const result = coverage[line.id];
+                      let coverageDetails: ReturnType<typeof summarizeCoverageMoves> | null = null;
+                      if (!result.error && result.suggestions?.length) {
+                        try {
+                          const targetKey = newGame(line.moves).fen().split(' ').slice(0, 4).join(' ');
+                          const knownNextMoves = new Set<string>();
+                          for (const candidateLine of repertoireLines) {
+                            try {
+                              const replay = newGame(candidateLine.moves);
+                              const history = replay.history({ verbose: true });
+                              const cursor = new Chess();
+                              for (const move of history) {
+                                if (cursor.fen().split(' ').slice(0, 4).join(' ') === targetKey) knownNextMoves.add(move.san.replace(/[!?+#]+/g, ''));
+                                cursor.move(move);
+                              }
+                            } catch { /* Ignore malformed legacy lines. */ }
+                          }
+                          coverageDetails = summarizeCoverageMoves(result.suggestions, [...knownNextMoves], 20);
+                        } catch { /* Keep frequency/depth results if a legacy line cannot be replayed. */ }
+                      }
                       return (
                         <div className="coverage-row" key={line.id}>
-                          <div><strong>{line.name}</strong><span>{result.error ? result.error : result.games.toLocaleString('nl-NL') + ' masterpartijen bij de eindstelling'}</span>
-                            {!result.error && result.suggestions?.length ? <div className="coverage-suggestions"><span>Populaire vervolgen uit de Masters-database:</span>{result.suggestions.map(move => <button key={move.uci} className="text-button" onClick={() => addCoverageSuggestion(line, move.san)} title={move.games.toLocaleString('nl-NL') + ' partijen'}>{move.san} · {move.games.toLocaleString('nl-NL')}</button>)}</div> : !result.error ? <span>Geen vervolg met minimaal 20 masterpartijen gevonden.</span> : null}
+                          <div><strong>{line.name}</strong><span>{result.error ? result.error : result.games.toLocaleString('nl-NL') + ' partijen bij de eindstelling'}</span>
+                            {coverageDetails && <span>Afdekking van de getoonde frequente vervolgen: {coverageDetails.weightedCoverage === null ? 'onvoldoende data' : coverageDetails.weightedCoverage + '%'} ({coverageDetails.coveredMoves}/{coverageDetails.observedMoves} zetten; gewogen op partijfrequentie).</span>}
+                            {!result.error && result.suggestions?.length ? <div className="coverage-suggestions"><span>Veelvoorkomende vervolgen uit {coverageSource === 'masters' ? 'masterpartijen' : ('Lichess-partijen (' + (ratingBand === 'all' ? 'alle ratings' : ratingBand) + ')')}:</span>{result.suggestions.map(move => <button key={move.uci} className="text-button" onClick={() => addCoverageSuggestion(line, move.san)} title={move.games.toLocaleString('nl-NL') + ' partijen'}>{move.san} · {move.games.toLocaleString('nl-NL')}</button>)}</div> : !result.error ? <span>Geen vervolg met minimaal 20 partijen gevonden.</span> : null}
+                            {coverageDetails?.missingMoves.length ? <span>Ontbrekende frequente zet: {coverageDetails.missingMoves[0].san} ({coverageDetails.missingMoves[0].games.toLocaleString('nl-NL')} partijen).</span> : null}
                           </div>
                           <span className={result.error ? 'coverage-status pending' : result.games <= positionGoal ? 'coverage-status done' : 'coverage-status extend'}>{result.error ? 'Niet gecontroleerd' : result.games <= positionGoal ? 'Diepte gehaald' : 'Voeg meer zetten toe'}</span>
                         </div>
