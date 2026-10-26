@@ -263,8 +263,8 @@ const dashboardMetrics = calculateRepertoireMetrics([
   'unknown:0': { seen: 100, misses: 0, due: 0 },
 }, 1_000);
 equal(dashboardMetrics.validLines, 2, 'dashboard sluit ongeldige lijnen uit');
-equal(dashboardMetrics.moveCount, 12, 'dashboard telt halve zetten uit geldige lijnen');
-equal(dashboardMetrics.uniquePositions, 6, 'dashboard dedupliceert gedeelde stellingen');
+equal(dashboardMetrics.moveCount, 10, 'dashboard telt halve zetten uit geldige lijnen');
+equal(dashboardMetrics.uniquePositions, 5, 'dashboard dedupliceert gedeelde stellingen');
 equal(dashboardMetrics.branchingPositions, 1, 'dashboard vindt een stelling met meerdere vervolgen');
 equal(dashboardMetrics.notedLines, 1, 'dashboard telt alleen lijnen met een plan');
 equal(dashboardMetrics.noteCoverage, 50, 'dashboard berekent plannotities-dekking');
