@@ -27,5 +27,6 @@ create policy "Users can update their own RepertoireLab backup"
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 
+-- Least privilege: the client only needs SELECT (restore), INSERT and UPDATE (upsert).
+revoke all on public.repertoirelab_backups from anon, authenticated;
 grant select, insert, update on public.repertoirelab_backups to authenticated;
-revoke all on public.repertoirelab_backups from anon;
