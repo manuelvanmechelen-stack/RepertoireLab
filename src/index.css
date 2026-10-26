@@ -1041,6 +1041,7 @@ textarea:focus-visible {
 }
 .grade-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 9px;
   margin-top: 11px;
@@ -1060,6 +1061,20 @@ textarea:focus-visible {
   border: 1px solid #386b51;
   background: #21392d;
   color: #9ae5ba;
+}
+.grade-row button {
+  flex: 1 1 72px;
+  min-width: 0;
+}
+.grade-hard {
+  border: 1px solid #6b5a37;
+  background: #342e22;
+  color: #f0d39a;
+}
+.grade-easy {
+  border: 1px solid #375d75;
+  background: #202e3a;
+  color: #a6d9f5;
 }
 .training-side {
   display: flex;
