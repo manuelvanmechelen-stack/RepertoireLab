@@ -839,6 +839,18 @@ function newGame(moves?: string) {
   return game;
 }
 
+// Duplicate detection must include the starting position as well as the SAN path.
+// Identical SAN sequences from a custom FEN are not the same repertoire line.
+function movePathSignature(game: Chess) {
+  const headers = game.getHeaders();
+  const startFen = headers.FEN ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  return startFen + '|' + game.history().join(' ');
+}
+
+function signatureFromPgn(pgn: string) {
+  return movePathSignature(newGame(pgn));
+}
+
 // Clone the complete move history, not just the current FEN. Loading only FEN
 // discards earlier moves and makes saved variants/undo contain only the last move.
 function cloneGame(source: Chess) {
@@ -1689,7 +1701,7 @@ function App() {
       setNotice('Deze zet is niet legaal in de huidige stelling.');
       return;
     }
-    const signature = candidate.history().join(' ');
+    const signature = movePathSignature(candidate);
     const duplicate = repertoireLines.find(line => {
       try { return newGame(line.moves).history().join(' ') === signature; } catch { return false; }
     });
@@ -1736,9 +1748,9 @@ function App() {
     if (!branchName.trim()) { setNotice('Geef de nieuwe variant eerst een naam.'); return; }
 
     // Chessbook-style repertoire trees should not accumulate duplicate full move paths.
-    const movePath = history.join(' ');
+    const movePath = movePathSignature(game);
     const duplicate = repertoireLines.find(line => {
-      try { return newGame(line.moves).history().join(' ') === movePath; }
+      try { return signatureFromPgn(line.moves) === movePathSignature(game); }
       catch { return false; }
     });
     if (duplicate) {
@@ -1873,7 +1885,7 @@ function App() {
     const existingSignatures = new Set(lines
       .filter(line => line.repertoireId === activeRepertoire.id)
       .flatMap(line => {
-        try { return [newGame(line.moves).history().join(' ')]; } catch { return []; }
+        try { return [signatureFromPgn(line.moves)]; } catch { return []; }
       }));
     let duplicateCount = 0;
     for (let index = 0; index < chunks.length; index++) {
