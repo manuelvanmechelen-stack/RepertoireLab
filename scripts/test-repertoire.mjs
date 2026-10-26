@@ -299,6 +299,47 @@ equal(selectDueOwnPly(6, 'Zwart', { 'x:1': { due: fixedNow - 1 } }, 'x', fixedNo
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow - 1, fixedNow), 0, 'verlopen hele variant start vanaf begin');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen vervallen zet valt terug op beginstelling');
 
+
+const fsrsFirst = scheduleFsrsMoveResult(undefined, true, fixedNow);
+equal(fsrsFirst.seen, 1, 'FSRS telt de eerste correcte zet');
+equal(fsrsFirst.misses, 0, 'FSRS bewaart nul fouten bij een correcte zet');
+check(Number.isFinite(fsrsFirst.due) && fsrsFirst.due > fixedNow, 'FSRS plant een toekomstige vervaldatum');
+check(Number.isFinite(fsrsFirst.fsrsCard.due), 'FSRS-kaart wordt JSON-veilig als timestamp opgeslagen');
+const fsrsMiss = scheduleFsrsMoveResult(fsrsFirst, false, fixedNow + 1000);
+equal(fsrsMiss.seen, 2, 'FSRS telt een volgende poging');
+equal(fsrsMiss.misses, 1, 'FSRS verhoogt fouten na een misser');
+equal(fsrsMiss.lastResult, 'miss', 'FSRS markeert een misser');
+check(fsrsMiss.due <= fixedNow + 1000 + 10 * 60_000, 'FSRS plant een misser op korte termijn');
+const fsrsLineAgain = scheduleFsrsLineGrade(undefined, 'again', fixedNow);
+equal(fsrsLineAgain.seen, 1, 'FSRS telt een eerste beoordeling van een variant');
+equal(fsrsLineAgain.lastGrade, 'again', 'FSRS bewaart de beoordeling van de variant');
+check(Number.isFinite(fsrsLineAgain.fsrsCard.due), 'FSRS-variantkaart bewaart de vervaldatum');
+const fsrsLineGood = scheduleFsrsLineGrade(fsrsLineAgain, 'good', fixedNow + 60_000);
+equal(fsrsLineGood.seen, 2, 'FSRS herstelt kaartstatus bij een volgende beoordeling');
+check(fsrsLineGood.fsrsCard.last_review === fixedNow + 60_000, 'FSRS bewaart het tijdstip van de laatste beoordeling');
+throws(() => scheduleFsrsLineGrade(undefined, 'unknown', fixedNow), 'FSRS weigert onbekende beoordelingen');
+
+const qualityLine = [{ id: 'quality', name: 'Testlijn', color: 'Wit', moves: '1. e4 e5 2. Nf3 Nc6', note: 'Plan' }];
+const quality = calculateRepertoireQuality(qualityLine, {
+  'quality:0': { seen: 4, misses: 1, due: fixedNow },
+  'quality:2': { seen: 4, misses: 1, due: fixedNow },
+}, {
+  quality: { moves: qualityLine[0].moves, findings: [{ lossCp: 0 }, { lossCp: 100 }, { lossCp: null }] },
+}, { quality: { games: 100, white: 40, draws: 30, black: 30 } });
+equal(quality.effectivenessGames, 100, 'effectiviteit gebruikt het aantal echte databasepartijen');
+equal(quality.practicalRate, 55, 'effectiviteit berekent resultaat voor de repertoirekleur inclusief halve remises');
+equal(quality.effectivenessScore, 66, 'effectiviteitsscore schaalt het gemeten praktijkresultaat');
+equal(quality.auditedMoves, 2, 'soundness negeert niet-vergelijkbare enginezetten');
+equal(quality.averageLossCp, 50, 'soundness berekent gemiddelde evaluatieverlies');
+equal(quality.soundnessScore, 69, 'soundness-score weerspiegelt gemiddeld engineverlies');
+equal(quality.recallRate, 75, 'leerbaarheid gebruikt trainingsnauwkeurigheid');
+equal(quality.reviewAttempts, 8, 'leerbaarheid telt trainingspogingen');
+check(quality.learnabilityScore >= 1 && quality.learnabilityScore <= 99, 'leerbaarheid blijft binnen de weergegeven scoregrenzen');
+const noQualityData = calculateRepertoireQuality(qualityLine, {}, {}, {});
+equal(noQualityData.effectivenessScore, null, 'geen praktijkdata levert geen verzonnen effectiviteitsscore');
+equal(noQualityData.soundnessScore, null, 'geen engine-audit levert geen verzonnen soundness-score');
+check(noQualityData.learnabilityScore !== null, 'leerbaarheid kan als structurele schatting worden getoond zonder trainingsdata');
+
 const gameOne = '[Event "Game one"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
 const gameTwo = '[Event "Game two"]\n[Site "Club"]\n\n1. d4 d5 0-1';
 const splitCollection = splitPgnCollection(gameOne + '\n\n' + gameTwo);
