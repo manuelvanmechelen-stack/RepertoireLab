@@ -81,8 +81,21 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
     if (session.expires_at > Date.now() + 60_000) return session.access_token;
     if (!session.refresh_token) throw new Error('Sessie verlopen. Log opnieuw in.');
     const refreshed = await request('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: session.refresh_token }) });
-    const next: Session = { access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: Date.now() + Number(refreshed.expires_in || 3600) * 1000, user: refreshed.user };
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(next)); setSession(next);
+    if (typeof refreshed?.access_token !== 'string' || !refreshed.access_token ||
+      typeof refreshed?.refresh_token !== 'string' || !refreshed.refresh_token ||
+      typeof refreshed?.user?.id !== 'string' || refreshed.user.id !== session.user.id) {
+      sessionStorage.removeItem(SESSION_KEY);
+      setSession(null);
+      throw new Error('De cloudsessie kon niet veilig worden vernieuwd. Log opnieuw in.');
+    }
+    const next: Session = {
+      access_token: refreshed.access_token,
+      refresh_token: refreshed.refresh_token,
+      expires_at: Date.now() + Math.max(60, Number(refreshed.expires_in) || 3600) * 1000,
+      user: refreshed.user,
+    };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
+    setSession(next);
     return next.access_token;
   }
 
@@ -90,10 +103,16 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
     setBusy(true); setMessage('');
     try {
       const token = await getToken();
+      const serialized = JSON.stringify(backup);
+      if (serialized.length > 8_000_000) throw new Error('Deze back-up is groter dan 8 MB. Exporteer hem lokaal en verklein de inhoud voordat je synchroniseert.');
+      const validated = JSON.parse(serialized) as Backup;
+      if (!validated || validated.app !== 'RepertoireLab' || !Array.isArray(validated.lines) || !Array.isArray(validated.repertoires)) {
+        throw new Error('De lokale back-up heeft geen geldige RepertoireLab-structuur.');
+      }
       await request('/rest/v1/repertoirelab_backups?on_conflict=user_id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ user_id: session!.user.id, payload: backup, updated_at: new Date().toISOString() }),
+        body: JSON.stringify({ user_id: session!.user.id, payload: validated, updated_at: new Date().toISOString() }),
       }, token);
       setMessage('Back-up veilig naar je cloudaccount gesynchroniseerd.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Synchroniseren mislukt.'); }
@@ -107,14 +126,21 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
       const token = await getToken();
       const rows = await request('/rest/v1/repertoirelab_backups?select=payload,updated_at&user_id=eq.' + encodeURIComponent(session!.user.id) + '&limit=1', {}, token);
       if (!Array.isArray(rows) || !rows[0]?.payload) throw new Error('Er staat nog geen back-up in de cloud. Synchroniseer dit apparaat eerst.');
-      await onRestore(rows[0].payload);
-      setMessage('Cloudback-up geladen.');
+      const payload = rows[0].payload as Partial<Backup>;
+      if (payload.app !== 'RepertoireLab' || !Array.isArray(payload.lines) || !Array.isArray(payload.repertoires)) {
+        throw new Error('De cloudback-up is beschadigd of hoort niet bij RepertoireLab. Je lokale gegevens zijn niet gewijzigd.');
+      }
+      await onRestore(payload);
+      setMessage('Cloudback-up geladen. Laatste cloudupdate: ' + (rows[0].updated_at ? new Date(rows[0].updated_at).toLocaleString() : 'onbekend') + '.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Herstellen uit cloud mislukt.'); }
     finally { setBusy(false); }
   }
 
   function logout() {
-    sessionStorage.removeItem(SESSION_KEY); setSession(null); setMessage('Uitgelogd op dit apparaat.');
+    try { sessionStorage.removeItem(SESSION_KEY); } catch { /* private browsing may block session storage */ }
+    setSession(null);
+    setPassword('');
+    setMessage('Uitgelogd op dit apparaat.');
   }
 
   return <section className="repertoire-builder cloud-sync-panel">
