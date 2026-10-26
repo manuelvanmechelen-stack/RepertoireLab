@@ -5,8 +5,8 @@ const normalizeSan = san => String(san ?? '').replace(/[!?+#]+/g, '').replace(/0
 
 /**
  * Compare a played game to the repertoire by chess position, not only by
- * identical move order. This recognizes transpositions and keeps missing
- * coverage separate from a chess-quality judgment.
+ * identical move order. If a different move order reaches a stored position,
+ * continue the review from that transposition rather than calling it a gap.
  */
 export function analyzeGameAgainstRepertoire(pgn, lines) {
   const game = new Chess();
@@ -42,33 +42,56 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
   let firstDeviation = null;
   let matchedPlies = 0;
   let bestMatchName = '';
-  for (let ply = 0; ply < history.length; ply++) {
+  let transpositionCount = 0;
+  let ply = 0;
+  while (ply < history.length) {
     const node = nodes.get(positionKey(played));
     const san = history[ply].san;
-    if (!node) {
-      firstDeviation = { ply, san, expectedMoves: [], side: ply % 2 === 0 ? 'Wit' : 'Zwart', kind: 'gap' };
-      break;
-    }
-    const expected = [...node.continuations.values()];
+    const expected = node ? [...node.continuations.values()] : [];
     const matching = expected.find(item => normalizeSan(item.san) === normalizeSan(san));
-    if (!matching) {
-      firstDeviation = {
-        ply, san, expectedMoves: expected.map(item => item.san),
-        side: ply % 2 === 0 ? 'Wit' : 'Zwart', kind: 'deviation',
-      };
-      break;
+    if (matching) {
+      matchedPlies++;
+      bestMatchName = [...matching.names][0] ?? bestMatchName;
+      played.move(history[ply]);
+      ply++;
+      continue;
     }
-    matchedPlies++;
-    bestMatchName = [...matching.names][0] ?? bestMatchName;
-    played.move(history[ply]);
+
+    // Look ahead for a genuine position match. Position keys include turn,
+    // castling rights and en-passant state; a mere similar-looking board is not enough.
+    const lookahead = new Chess(played.fen());
+    let rejoinPly = -1;
+    const lookaheadLimit = Math.min(history.length, ply + 13);
+    for (let candidatePly = ply; candidatePly < lookaheadLimit; candidatePly++) {
+      lookahead.move(history[candidatePly]);
+      if (nodes.has(positionKey(lookahead))) {
+        rejoinPly = candidatePly + 1;
+        break;
+      }
+    }
+    if (rejoinPly > ply) {
+      transpositionCount += rejoinPly - ply;
+      while (ply < rejoinPly) {
+        played.move(history[ply]);
+        ply++;
+      }
+      continue;
+    }
+
+    firstDeviation = {
+      ply, san, expectedMoves: expected.map(item => item.san),
+      side: ply % 2 === 0 ? 'Wit' : 'Zwart',
+      kind: node ? 'deviation' : 'gap',
+    };
+    break;
   }
 
-  const moveLabel = ply => Math.floor(ply / 2) + 1 + (ply % 2 === 0 ? '.' : '...');
+  const moveLabel = movePly => Math.floor(movePly / 2) + 1 + (movePly % 2 === 0 ? '.' : '...');
   const players = (headers.White ?? 'Wit') + ' – ' + (headers.Black ?? 'Zwart');
   const result = headers.Result ?? '*';
   const matchSummary = matchedPlies
-    ? 'repertoirepositie gematcht: ' + matchedPlies + ' halve zetten' + (bestMatchName ? ' — ' + bestMatchName : '')
-    : 'geen opgeslagen positie komt overeen met de partij';
+    ? 'repertoirezet gematcht: ' + matchedPlies + ' halve zetten' + (bestMatchName ? ' — ' + bestMatchName : '')
+    : 'geen directe repertoirezetten gematcht';
   let deviationSummary = 'geen afwijking gevonden binnen de gespeelde zetten';
   if (firstDeviation?.kind === 'deviation') {
     deviationSummary = 'eerste afwijking bij ' + moveLabel(firstDeviation.ply) + ' ' + firstDeviation.san +
@@ -78,10 +101,13 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
     deviationSummary = 'repertoiredekking ontbreekt vanaf ' + moveLabel(firstDeviation.ply) + ' ' + firstDeviation.san +
       '; er was geen opgeslagen vervolg vanuit deze stelling';
   }
+  const transpositionSummary = transpositionCount
+    ? '; transpositie herkend na ' + transpositionCount + ' halve zetten in een andere zettenvolgorde'
+    : '';
 
   return {
     players, result, plyCount: history.length, bestMatchName,
-    matchedPlies, firstDeviation,
-    summary: players + ' (' + result + '): ' + matchSummary + '; ' + deviationSummary + '.',
+    matchedPlies, transpositionCount, firstDeviation,
+    summary: players + ' (' + result + '): ' + matchSummary + transpositionSummary + '; ' + deviationSummary + '.',
   };
 }
