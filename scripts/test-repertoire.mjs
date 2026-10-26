@@ -113,7 +113,7 @@ const fianchettoPositionA = new Chess();
 for (const san of ['Nf3','d5','g3','Nf6','Bg2','g6']) fianchettoPositionA.move(san);
 const fianchettoNode = tree.nodes.find(node => node.key === positionKey(fianchettoPositionA));
 check(fianchettoNode, 'transpositiepositie staat als één gedeelde node in de boom');
-check(fianchettoNode.incoming.length >= 2, 'transpositiepositie bewaart beide inkomende zettenvolgordes');
+check(fianchettoNode.pathCount >= 2, 'transpositiepositie bewaart beide verschillende zettenvolgordes');
 check(tree.transpositionPositions >= 1, 'boom telt transpositieposities');
 equal(getRepertoireContinuations(tree, 'invalid fen').length, 0, 'onbekende stelling geeft geen repertoirezetten');
 
