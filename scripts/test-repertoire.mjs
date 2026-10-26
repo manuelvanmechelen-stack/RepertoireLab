@@ -5,6 +5,7 @@ import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves } from '../src/study/coverage.mjs';
+import { calculateRepertoireMetrics } from '../src/study/analytics.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -249,7 +250,30 @@ equal(rankedCoverage[0].san, 'Nc6', 'coverage sorteert op grootste partijsteekpr
 equal(rankedCoverage[0].games, 300, 'coverage telt alle partijresultaten op');
 equal(rankedCoverage[2].san, 'e6', 'coverage neemt de grens van twintig partijen mee');
 equal(rankCoverageMoves(coverageSample, 40, 1)[0].san, 'Nc6', 'coverage ondersteunt eigen drempel en limiet');
+
 equal(rankCoverageMoves(null).length, 0, 'ongeldige invoer geeft geen suggesties');
+
+const dashboardMetrics = calculateRepertoireMetrics([
+  { id: 'a', name: 'Hoofdvariant', moves: '1. e4 e5 2. Nf3 Nc6 3. Bb5', note: 'Plan' },
+  { id: 'b', name: 'Italiaans', moves: '1. e4 e5 2. Nf3 Nc6 3. Bc4', note: '' },
+  { id: 'invalid', moves: '1. e4 Qh9', note: 'Ongeldig' },
+], {
+  'a:0': { seen: 4, misses: 1, due: 100 },
+  'a:2': { seen: 2, misses: 0, due: 9_000_000_000_000 },
+  'unknown:0': { seen: 100, misses: 0, due: 0 },
+}, 1_000);
+equal(dashboardMetrics.validLines, 2, 'dashboard sluit ongeldige lijnen uit');
+equal(dashboardMetrics.moveCount, 12, 'dashboard telt halve zetten uit geldige lijnen');
+equal(dashboardMetrics.uniquePositions, 6, 'dashboard dedupliceert gedeelde stellingen');
+equal(dashboardMetrics.branchingPositions, 1, 'dashboard vindt een stelling met meerdere vervolgen');
+equal(dashboardMetrics.notedLines, 1, 'dashboard telt alleen lijnen met een plan');
+equal(dashboardMetrics.noteCoverage, 50, 'dashboard berekent plannotities-dekking');
+equal(dashboardMetrics.totalAttempts, 6, 'dashboard negeert trainingsdata van onbekende lijnen');
+equal(dashboardMetrics.totalMisses, 1, 'dashboard telt historische fouten veilig');
+equal(dashboardMetrics.accuracy, 83, 'dashboard berekent nauwkeurigheid uit pogingen');
+equal(dashboardMetrics.dueMoves, 1, 'dashboard telt vervallen individuele zetten');
+equal(calculateRepertoireMetrics([], {}).accuracy, null, 'dashboard toont geen verzonnen nauwkeurigheid zonder pogingen');
+
 
 // 12. Game review: identify the first concrete repertoire deviation.
 const savedLines = [
