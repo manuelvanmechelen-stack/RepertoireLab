@@ -8,6 +8,7 @@ import { rankCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
+import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -34,6 +35,17 @@ equal(priorityOrder[0], 'weak-due', 'zwakste vervallen variant komt eerst');
 equal(priorityOrder[1], 'same-interval-old', 'bij gelijk interval komt de meest vervallen variant eerst');
 equal(priorityOrder[priorityOrder.length - 1], 'future', 'toekomstige variant komt na vervallen varianten');
 equal(rankTrainingLines(priorityLines, {}, {}, priorityNow).length, priorityLines.length, 'prioritering verliest geen varianten');
+
+// 0c. Offline ECO/opening recognition: exact matches, prefix matches, and unknown inputs.
+const scotchOpening = identifyOpening('1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4');
+equal(scotchOpening?.eco, 'C45', 'Schots wordt offline herkend met ECO-code');
+equal(scotchOpening?.name, 'Schots – hoofdvariant', 'Schotse hoofdvariant krijgt de juiste naam');
+check(scotchOpening?.exact, 'exacte openingslijn wordt als exact gemarkeerd');
+const scotchPrefix = identifyOpening('1. e4 e5 2. Nf3 Nc6 3. d4');
+equal(scotchPrefix?.eco, 'C45', 'kortere lijn wordt herkend als Schotse opening');
+check(scotchPrefix?.exact === false, 'kortere lijn krijgt voorlopige herkenning');
+equal(identifyOpening('ongeldige PGN'), null, 'ongeldige PGN geeft geen opening');
+check(listOpeningCatalog().length >= 35, 'offline catalogus bevat een bruikbare basisset');
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
