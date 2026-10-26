@@ -15,7 +15,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "chess.js": "^1.4.0",
-    "stockfish": "^19.0.1"
+    "stockfish": "^19.0.1",
+    "ts-fsrs": "^5.4.2"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.0.0"
