@@ -1051,7 +1051,7 @@ function App() {
     [repertoireLines, query, colorFilter]
   );
   const totalSeen = lines.reduce((sum, line) => sum + line.seen, 0);
-  const repertoireMetrics = useMemo(() => calculateRepertoireMetrics(lines, moveMemory), [lines, moveMemory]);
+  const repertoireMetrics = useMemo(() => calculateRepertoireMetrics(lines, moveMemory, Date.now(), engineLineAudits), [lines, moveMemory, engineLineAudits]);
   const trainingHealth = useMemo(() => {
     const ownMoves = Object.entries(moveMemory).filter(([key]) => lines.some(line => key.startsWith(line.id + ':')));
     const moveAttempts = ownMoves.reduce((sum, [, item]) => sum + item.seen, 0);
@@ -2307,7 +2307,7 @@ function App() {
                   <div>
                     <div className="eyebrow">REPERTOIREKWALITEIT</div>
                     <h2>Controleer je voorbereiding</h2>
-                    <p>Meetbare gegevens uit je opgeslagen lijnen en zettraining. Enginekwaliteit en praktische resultaten worden niet gegokt: die vereisen analyse of partijdata.</p>
+                    <p>Meetbare gegevens uit je opgeslagen lijnen en zettraining. De engine-indicator gebruikt alleen opgeslagen Stockfish-screenings; praktische resultaten vereisen voldoende partijdata.</p>
                   </div>
                   <div className="study-accuracy">
                     <strong>{repertoireMetrics.accuracy === null ? '—' : repertoireMetrics.accuracy + '%'}</strong>
@@ -2323,6 +2323,9 @@ function App() {
                   <div><span>Vervallen zetten</span><strong>{repertoireMetrics.dueMoves}</strong></div>
                   <div><span>Varianten met plan</span><strong>{repertoireMetrics.noteCoverage === null ? '—' : repertoireMetrics.noteCoverage + '%'}</strong></div>
                   <div><span>Plannotities</span><strong>{repertoireMetrics.notedLines}/{repertoireMetrics.validLines}</strong></div>
+                  <div><span>Engineconsistentie (screening)</span><strong>{repertoireMetrics.engineConsistency === null ? '—' : repertoireMetrics.engineConsistency + '%'}</strong></div>
+                  <div><span>Zetten in Stockfish-screening</span><strong>{repertoireMetrics.engineComparableMoves}/{repertoireMetrics.engineAuditMoves}</strong></div>
+                  <div><span>Grote evaluatieafwijkingen</span><strong>{repertoireMetrics.engineOutliers}</strong></div>
                 </div>
                 <div className="study-focus-actions">
                   <button className="primary" onClick={() => { setTab('repertoire'); setShowTranspositions(true); }}>Controleer repertoirestructuur</button>
@@ -2330,7 +2333,7 @@ function App() {
                 </div>
                 <div className="study-empty">
                   <strong>Wat nog aparte controle vraagt</strong>
-                  <p>Gebruik Stockfish in de stellinganalyse om zetten inhoudelijk te beoordelen. De partijreview detecteert repertoire-afwijkingen, maar noemt een zet niet automatisch slecht. Praktische effectiviteit kan pas betrouwbaar worden berekend uit voldoende geïmporteerde partijen met bekende uitslagen.</p>
+                  <p>De engineconsistentie is een beperkte top-vijf-screening, geen volledige engine-rating. De partijreview detecteert repertoire-afwijkingen, maar noemt een zet niet automatisch slecht. Praktische effectiviteit kan pas betrouwbaar worden berekend uit voldoende geïmporteerde partijen met bekende uitslagen.</p>
                 </div>
               </section>
               <section className="study-focus-panel">
