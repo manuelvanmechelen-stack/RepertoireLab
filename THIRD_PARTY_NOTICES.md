@@ -29,3 +29,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+## Lichess chess-openings — offline ECO catalogue
+
+- Project: https://github.com/lichess-org/chess-openings
+- License: CC0 1.0 Universal (public domain dedication).
+- Use in RepertoireLab: the opening names, ECO codes, and PGN move sequences in `src/study/lichessOpenings.mjs` are included for offline opening recognition. The dataset is available under CC0; no additional attribution is required by that license, but this notice records the source.
