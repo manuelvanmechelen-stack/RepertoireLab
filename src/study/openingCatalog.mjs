@@ -4,6 +4,7 @@ import { Chess } from 'chess.js';
 // only a position reached by the supplied line can match. Online Explorer remains
 // the source for broad statistics and full ECO coverage.
 const OPENINGS = [
+  ['C45','Schots (Scotch Game)','1. e4 e5 2. Nf3 Nc6 3. d4'],
   ['C45','Schots – hoofdvariant','1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4'],
   ['C44','Schots gambiet','1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Bc4'],
   ['C50','Italiaans','1. e4 e5 2. Nf3 Nc6 3. Bc4'],
