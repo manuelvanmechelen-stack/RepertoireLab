@@ -1703,7 +1703,7 @@ function App() {
     }
     const signature = movePathSignature(candidate);
     const duplicate = repertoireLines.find(line => {
-      try { return newGame(line.moves).history().join(' ') === signature; } catch { return false; }
+      try { return signatureFromPgn(line.moves) === signature; } catch { return false; }
     });
     if (duplicate) {
       setActive(duplicate.id);
@@ -1748,9 +1748,9 @@ function App() {
     if (!branchName.trim()) { setNotice('Geef de nieuwe variant eerst een naam.'); return; }
 
     // Chessbook-style repertoire trees should not accumulate duplicate full move paths.
-    const movePath = movePathSignature(game);
+    const signature = movePathSignature(game);
     const duplicate = repertoireLines.find(line => {
-      try { return signatureFromPgn(line.moves) === movePathSignature(game); }
+      try { return signatureFromPgn(line.moves) === signature; }
       catch { return false; }
     });
     if (duplicate) {
