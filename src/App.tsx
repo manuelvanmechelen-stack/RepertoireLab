@@ -1992,7 +1992,6 @@ function App() {
     setDailyTraining(previous => ({ date: today, count: (previous.date === today ? previous.count : 0) + 1 }));
     const remembered = grade !== 'again';
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
-    const recentMoveMisses = Object.entries(moveMemory).filter(([key, item]) => key.startsWith(review.id + ':') && item.lastResult === 'miss' && item.due > Date.now() - 7 * 86400000).length;
     const scheduled = scheduleFsrsLineGrade(review, grade);
     const { seen: nextSeen, intervalDays, due: nextDue, fsrsCard } = scheduled;
     setLines(prev => prev.map(line => line.id === review.id ? {
