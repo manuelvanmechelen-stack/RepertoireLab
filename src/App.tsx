@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
-import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, selectDueOwnPly, type LineGrade } from './study/scheduling.mjs';
+import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, selectDueOwnPly, type LineGrade, type FsrsCardState } from './study/scheduling.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
@@ -975,7 +975,7 @@ function App() {
   const [trainingBoardFen, setTrainingBoardFen] = useState('start');
   const [trainingSelected, setTrainingSelected] = useState<Square | null>(null);
   const [trainingBoardFlip, setTrainingBoardFlip] = useState(false);
-  const [moveMemory, setMoveMemory] = useState<Record<string, { seen: number; misses: number; due: number; intervalDays: number; lastResult?: 'good' | 'miss' }>>(() => { try { return JSON.parse(localStorage.getItem('repertoirelab-move-memory-v1') ?? '{}'); } catch { return {}; } });
+  const [moveMemory, setMoveMemory] = useState<Record<string, { seen: number; misses: number; due: number; intervalDays: number; lastResult?: 'good' | 'miss'; fsrsCard?: FsrsCardState }>>(() => { try { return JSON.parse(localStorage.getItem('repertoirelab-move-memory-v1') ?? '{}'); } catch { return {}; } });
   const [trainingEval, setTrainingEval] = useState<CloudEval | null>(null);
   const [trainingEvalLoading, setTrainingEvalLoading] = useState(false);
   const [trainingEvalError, setTrainingEvalError] = useState('');
@@ -1926,13 +1926,13 @@ function App() {
     const answer = expected[trainingPly].replace(/[!?+#]+/g, '');
     const key = review.id + ':' + trainingPly;
     if (input === answer) {
-      setMoveMemory(previous => ({ ...previous, [key]: scheduleMoveResult(previous[key], true) }));
+      setMoveMemory(previous => ({ ...previous, [key]: scheduleFsrsMoveResult(previous[key], true) }));
       const next = trainingPly + 1;
       setTrainingPly(next); setTrainingInput('');
       setTrainingFeedback('Correct: ' + expected[trainingPly] + (next === expected.length ? ' — einde van de variant.' : ''));
       if (next === expected.length) setTrainingComplete(true);
     } else {
-      setMoveMemory(previous => ({ ...previous, [key]: scheduleMoveResult(previous[key], false) }));
+      setMoveMemory(previous => ({ ...previous, [key]: scheduleFsrsMoveResult(previous[key], false) }));
       setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
       setTrainingFeedback('Niet goed. Probeer opnieuw; denk aan de ontwikkelingszet en de dreiging in deze stelling.');
     }
@@ -1972,10 +1972,10 @@ function App() {
       const norm = (v: string) => v.replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
       const key = review.id + ':' + trainingPly;
       if (norm(played.san) !== norm(expected[trainingPly] ?? '')) {
-        setMoveMemory(prev => ({ ...prev, [key]: scheduleMoveResult(prev[key], false) }));
+        setMoveMemory(prev => ({ ...prev, [key]: scheduleFsrsMoveResult(prev[key], false) }));
         setMissedMoves(prev => ({ ...prev, [review.id]: (prev[review.id] ?? 0) + 1 })); setTrainingFeedback('Niet de opgeslagen zet. Verwacht: ' + (expected[trainingPly] ?? 'einde van de variant') + '. Probeer opnieuw.'); setTrainingSelected(null); return;
       }
-      setMoveMemory(prev => ({ ...prev, [key]: scheduleMoveResult(prev[key], true) }));
+      setMoveMemory(prev => ({ ...prev, [key]: scheduleFsrsMoveResult(prev[key], true) }));
       let next = trainingPly + 1; const replay = new Chess(currentBoard.fen());
       while (next < expected.length && !isOwnTrainingPly(next, review.color)) { replay.move(expected[next]); next++; }
       setTrainingPly(next); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingFeedback(next >= expected.length ? 'Variant voltooid. Beoordeel nu hoe goed je de variant kende.' : 'Correct: ' + played.san + '. ' + (next > trainingPly + 1 ? 'Tegenzet automatisch afgespeeld. ' : '') + 'Speel de volgende repertoirezet.');
@@ -1991,9 +1991,9 @@ function App() {
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
     const recentMoveMisses = Object.entries(moveMemory).filter(([key, item]) => key.startsWith(review.id + ':') && item.lastResult === 'miss' && item.due > Date.now() - 7 * 86400000).length;
     const scheduled = scheduleLineGrade(review, grade, recentMoveMisses);
-    const { seen: nextSeen, intervalDays, due: nextDue } = scheduled;
+    const { seen: nextSeen, intervalDays, due: nextDue, fsrsCard } = scheduled;
     setLines(prev => prev.map(line => line.id === review.id ? {
-      ...line, seen: nextSeen, due: nextDue, intervalDays,
+      ...line, seen: nextSeen, due: nextDue, intervalDays, fsrsCard,
       tags: remembered
         ? [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Opnieuw oefenen'), 'Herhaling actief'])]
         : [...new Set([...(line.tags ?? []).filter(tag => tag !== 'Herhaling actief'), 'Opnieuw oefenen'])],
