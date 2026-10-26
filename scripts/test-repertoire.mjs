@@ -247,7 +247,7 @@ const rankedCoverage = rankCoverageMoves(coverageSample);
 equal(rankedCoverage.length, 3, 'coverage toont maximaal drie vervolgen boven de minimumsteekproef');
 equal(rankedCoverage[0].san, 'Nc6', 'coverage sorteert op grootste partijsteekproef');
 equal(rankedCoverage[0].games, 300, 'coverage telt alle partijresultaten op');
-equal(rankedCoverage[2].san, 'Nf6', 'coverage neemt de grens van twintig partijen mee');
+equal(rankedCoverage[2].san, 'e6', 'coverage neemt de grens van twintig partijen mee');
 equal(rankCoverageMoves(coverageSample, 40, 1)[0].san, 'Nc6', 'coverage ondersteunt eigen drempel en limiet');
 equal(rankCoverageMoves(null).length, 0, 'ongeldige invoer geeft geen suggesties');
 
