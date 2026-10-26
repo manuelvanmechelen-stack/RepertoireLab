@@ -443,4 +443,16 @@ equal(transpositionReview.transpositionCount, 3, 'review registreert de halve ze
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
+// 13. Custom-FEN PGNs must branch from their declared starting position, not the standard root.
+const customStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const customFenPgn = '[Event "Custom start"]\\n[SetUp "1"]\\n[FEN "' + customStartFen + '"]\\n\\n1... c5 *';
+const customFenTree = buildRepertoireTree([
+  { id: 'custom-fen-line', name: 'Siciliaans vanaf FEN', moves: customFenPgn },
+]);
+equal(customFenTree.validLines, 1, 'PGN met custom FEN wordt als geldige variant verwerkt');
+equal(customFenTree.invalidLines, 0, 'PGN met custom FEN veroorzaakt geen replayfout');
+const customFenMoves = getRepertoireContinuations(customFenTree, customStartFen);
+check(customFenMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling toont de opgeslagen vervolgzet');
+check(!getRepertoireContinuations(customFenTree, new Chess().fen()).some(move => move.san === 'c5'), 'custom-FEN-variant vervuilt de standaard beginstelling niet');
+
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
