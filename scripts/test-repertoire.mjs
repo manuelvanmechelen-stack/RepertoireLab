@@ -6,6 +6,7 @@ import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics } from '../src/study/analytics.mjs';
+import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -88,6 +89,33 @@ for (const san of ['Nf3','d5','g3','Nf6','Bg2','e6']) play(transpositionA, san);
 const transpositionB = new Chess();
 for (const san of ['g3','d5','Bg2','Nf6','Nf3','e6']) play(transpositionB, san);
 equal(positionKey(transpositionA), positionKey(transpositionB), 'transponerende zetten moeten dezelfde positie-signatuur geven');
+
+// 5b. Position-based repertoire graph merges shared branches and transpositions.
+const tree = buildRepertoireTree([
+  { id: 'scotch-bb5', name: 'Schots met Bb5', moves: '1. e4 e5 2. Nf3 Nc6 3. Bb5' },
+  { id: 'scotch-bc4', name: 'Schots met Bc4', moves: '1. e4 e5 2. Nf3 Nc6 3. Bc4' },
+  { id: 'fianchetto-a', name: 'Fianchetto volgorde A', moves: '1. Nf3 d5 2. g3 Nf6 3. Bg2 g6' },
+  { id: 'fianchetto-b', name: 'Fianchetto volgorde B', moves: '1. g3 d5 2. Nf3 Nf6 3. Bg2 g6' },
+]);
+equal(tree.validLines, 4, 'repertoireboom verwerkt alle geldige varianten');
+equal(tree.invalidLines, 0, 'repertoireboom rapporteert geen ongeldige varianten');
+const startMoves = getRepertoireContinuations(tree, new Chess().fen());
+check(startMoves.some(move => move.san === 'e4') && startMoves.some(move => move.san === 'Nf3') && startMoves.some(move => move.san === 'g3'), 'boom toont verschillende beginzetten als aparte takken');
+const afterE4 = new Chess();
+afterE4.move('e4');
+const afterE5 = new Chess(afterE4.fen());
+afterE5.move('e5');
+afterE5.move('Nf3');
+afterE5.move('Nc6');
+const scotchBranches = getRepertoireContinuations(tree, afterE5.fen());
+check(scotchBranches.some(move => move.san === 'Bb5') && scotchBranches.some(move => move.san === 'Bc4'), 'gedeelde stelling behoudt beide Schotse takken');
+const fianchettoPositionA = new Chess();
+for (const san of ['Nf3','d5','g3','Nf6','Bg2','g6']) fianchettoPositionA.move(san);
+const fianchettoNode = tree.nodes.find(node => node.key === positionKey(fianchettoPositionA));
+check(fianchettoNode, 'transpositiepositie staat als één gedeelde node in de boom');
+check(fianchettoNode.incoming.length >= 2, 'transpositiepositie bewaart beide inkomende zettenvolgordes');
+check(tree.transpositionPositions >= 1, 'boom telt transpositieposities');
+equal(getRepertoireContinuations(tree, 'invalid fen').length, 0, 'onbekende stelling geeft geen repertoirezetten');
 
 // 6. PGN collection import semantics: multiple tagged games, metadata, and invalid-game handling.
 const collection = `[Event "Schots - hoofdvariant"]
