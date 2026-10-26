@@ -293,6 +293,13 @@ equal(coveredGame.firstDeviation, null, 'een volledige match tot het einde van d
 check(coveredGame.summary.includes('Italiaans'), 'review herkent welke repertoirelijn gevolgd is');
 const uncoveredGame = analyzeGameAgainstRepertoire('1. e4 e5 2. Nf3', [{ name: 'Korte lijn', color: 'Wit', moves: '1. e4 e5' }]);
 equal(uncoveredGame.firstDeviation?.kind, 'gap', 'review herkent wanneer een gespeelde voortzetting buiten de opgeslagen lijn valt');
+const transpositionReview = analyzeGameAgainstRepertoire(
+  '1. g3 d5 2. Nf3 Nf6 3. Bg2 g6 4. O-O',
+  [{ id: 'fianchetto', name: 'Fianchetto-opbouw', color: 'Wit', moves: '1. Nf3 d5 2. g3 Nf6 3. Bg2 g6 4. O-O' }],
+);
+equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie met andere zettenvolgorde');
+equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
+check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
