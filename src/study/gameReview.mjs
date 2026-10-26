@@ -39,6 +39,16 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
     const continuations = matchingPrefix
       .filter(line => line.moves.length > ply)
       .map(line => ({ name: line.name, san: line.moves[ply], color: line.color }));
+    if (!matchingPrefix.length) {
+      firstDeviation = {
+        ply,
+        san: history[ply],
+        expectedMoves: [],
+        side: ply % 2 === 0 ? 'Wit' : 'Zwart',
+        kind: 'gap',
+      };
+      break;
+    }
     if (continuations.length && !continuations.some(line => line.san === history[ply])) {
       firstDeviation = {
         ply,
