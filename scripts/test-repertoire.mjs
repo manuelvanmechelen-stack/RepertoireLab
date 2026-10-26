@@ -7,6 +7,7 @@ import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
+import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -16,6 +17,23 @@ function gameFromPgn(pgn) { const game = new Chess(); game.loadPgn(pgn); return 
 function play(game, san, label = san) { const result = game.move(san); check(result, 'Zet moet legaal zijn: ' + label); return result; }
 function positionKey(game) { return game.fen().split(' ').slice(0, 4).join(' '); }
 function normalizeSan(san) { return san.replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O'); }
+
+// 0b. Adaptive training priority inspired by Tabia's MIT-licensed due-line picker.
+const priorityNow = 1_800_000_000_000;
+const priorityLines = [
+  { id: 'future', due: priorityNow + 2 * 86_400_000, intervalDays: 1 },
+  { id: 'old-strong', due: priorityNow - 5 * 86_400_000, intervalDays: 12 },
+  { id: 'weak-due', due: priorityNow - 86_400_000, intervalDays: 0 },
+  { id: 'same-interval-old', due: priorityNow - 4 * 86_400_000, intervalDays: 3 },
+  { id: 'same-interval-new', due: priorityNow - 86_400_000, intervalDays: 3 },
+];
+const priorityOrder = rankTrainingLines(priorityLines, {
+  'same-interval-old:0': { seen: 4, misses: 3, due: priorityNow - 4 * 86_400_000 },
+}, {}, priorityNow).map(line => line.id);
+equal(priorityOrder[0], 'weak-due', 'zwakste vervallen variant komt eerst');
+equal(priorityOrder[1], 'same-interval-old', 'bij gelijk interval komt de meest vervallen variant eerst');
+equal(priorityOrder[priorityOrder.length - 1], 'future', 'toekomstige variant komt na vervallen varianten');
+equal(rankTrainingLines(priorityLines, {}, {}, priorityNow).length, priorityLines.length, 'prioritering verliest geen varianten');
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
