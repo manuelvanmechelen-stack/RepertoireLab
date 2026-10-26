@@ -958,10 +958,12 @@ function App() {
   });
   const [showOpeningIdeas, setShowOpeningIdeas] = useState(true);
   const [trainingPly, setTrainingPly] = useState(0);
-  const [dailyTraining, setDailyTraining] = useState(() => {
+  const [dailyTraining, setDailyTraining] = useState<{ date: string; count: number }>(() => {
     const today = new Date().toISOString().slice(0, 10);
-    try { const saved = JSON.parse(localStorage.getItem('repertoirelab-daily-training-v1') ?? 'null'); return saved?.date === today && Number.isFinite(saved?.count) ? saved : { date: today, count: 0 }; }
-    catch { return { date: today, count: 0 }; }
+    try {
+      const saved = JSON.parse(localStorage.getItem('repertoirelab-daily-training-v1') ?? 'null') as { date?: unknown; count?: unknown } | null;
+      return saved?.date === today && typeof saved.count === 'number' && Number.isFinite(saved.count) ? { date: today, count: saved.count } : { date: today, count: 0 };
+    } catch { return { date: today, count: 0 }; }
   });
   const [trainingInput, setTrainingInput] = useState('');
   const [trainingFeedback, setTrainingFeedback] = useState('');
