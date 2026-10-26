@@ -8,6 +8,7 @@ import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
+import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
   BarChart3,
@@ -1071,7 +1072,7 @@ function App() {
   const dueMoveLineIds = new Set(Object.entries(moveMemory).filter(([, item]) => item.due <= Date.now()).map(([key]) => key.slice(0, key.lastIndexOf(':'))));
   const dueCount = lines.filter(line => !line.due || line.due <= Date.now() || dueMoveLineIds.has(line.id)).length;
   const transpositions = useMemo(() => analyzeTranspositions(repertoireLines), [repertoireLines]);
-  const reviewLines = lines.filter(line => dueIds.length ? dueIds.includes(line.id) : ((!line.due || line.due <= Date.now()) || dueMoveLineIds.has(line.id)));
+  const reviewLines = rankTrainingLines(lines.filter(line => dueIds.length ? dueIds.includes(line.id) : ((!line.due || line.due <= Date.now()) || dueMoveLineIds.has(line.id))), moveMemory, missedMoves);
   const review = reviewLines.length
     ? reviewLines[reviewIndex % reviewLines.length]
     : null;
