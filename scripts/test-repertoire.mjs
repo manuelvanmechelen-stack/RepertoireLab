@@ -4,6 +4,7 @@ import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, isDue, selec
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
+import { rankCoverageMoves } from '../src/study/coverage.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -235,6 +236,20 @@ equal(fallbackBackup.activeRepertoireId, 'rep-1', 'ongeldige actieve repertoirek
 const emptyBackup = validateBackup({ lines: [], repertoires: [] });
 equal(emptyBackup.lines.length, 0, 'lege maar geldige back-up kan worden hersteld');
 equal(emptyBackup.activeRepertoireId, '', 'lege back-up heeft geen actief repertoire');
+
+const coverageSample = [
+  { san: 'Nf6', uci: 'g8f6', white: 20, draws: 30, black: 50 },
+  { san: 'Nc6', uci: 'b8c6', white: 90, draws: 80, black: 130 },
+  { san: 'd6', uci: 'd7d6', white: 2, draws: 4, black: 5 },
+  { san: 'e6', uci: 'e7e6', white: 10, draws: 5, black: 5 },
+];
+const rankedCoverage = rankCoverageMoves(coverageSample);
+equal(rankedCoverage.length, 3, 'coverage toont maximaal drie vervolgen boven de minimumsteekproef');
+equal(rankedCoverage[0].san, 'Nc6', 'coverage sorteert op grootste partijsteekproef');
+equal(rankedCoverage[0].games, 300, 'coverage telt alle partijresultaten op');
+equal(rankedCoverage[2].san, 'Nf6', 'coverage neemt de grens van twintig partijen mee');
+equal(rankCoverageMoves(coverageSample, 40, 1)[0].san, 'Nc6', 'coverage ondersteunt eigen drempel en limiet');
+equal(rankCoverageMoves(null).length, 0, 'ongeldige invoer geeft geen suggesties');
 
 // 12. Game review: identify the first concrete repertoire deviation.
 const savedLines = [
