@@ -48,6 +48,12 @@ type CloudEval = {
   knodes: number;
   pvs: Array<{ moves: string; cp?: number; mate?: number }>;
 };
+type EngineLineAudit = {
+  moves: string;
+  depth: number;
+  analyzedAt: number;
+  findings: Array<{ ply: number; san: string; bestMove: string; lossCp: number | null; status: string }>;
+};
 type Repertoire = { id: string; name: string; color: 'Wit' | 'Zwart'; createdAt: number };
 type GameReviewEntry = { summary: string; pgn?: string; deviationKind?: 'deviation' | 'gap' | null };
 type Line = {
@@ -960,6 +966,11 @@ function App() {
   const [trainingEvalLoading, setTrainingEvalLoading] = useState(false);
   const [trainingEvalError, setTrainingEvalError] = useState('');
   const [trainingAnalysisDepth, setTrainingAnalysisDepth] = useState(16);
+  const [engineLineAudits, setEngineLineAudits] = useState<Record<string, EngineLineAudit>>(() => {
+    try { return JSON.parse(localStorage.getItem('repertoirelab-engine-line-audits-v1') ?? '{}') as Record<string, EngineLineAudit>; } catch { return {}; }
+  });
+  const [engineLineAuditLoading, setEngineLineAuditLoading] = useState(false);
+  const [engineLineAuditError, setEngineLineAuditError] = useState('');
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -987,6 +998,7 @@ function App() {
     localStorage.setItem('repertoirelab-missed-moves-v1', JSON.stringify(missedMoves));
   }, [missedMoves]);
   useEffect(() => { localStorage.setItem('repertoirelab-move-memory-v1', JSON.stringify(moveMemory)); }, [moveMemory]);
+  useEffect(() => { localStorage.setItem('repertoirelab-engine-line-audits-v1', JSON.stringify(engineLineAudits)); }, [engineLineAudits]);
   useEffect(() => {
     if (explorerToken.trim()) localStorage.setItem('repertoirelab-lichess-token-v1', explorerToken.trim());
     else localStorage.removeItem('repertoirelab-lichess-token-v1');
@@ -2040,7 +2052,66 @@ function App() {
     }
   }
 
-    async function lookupEvaluation() {
+    async function analyzeCurrentLineWithStockfish() {
+    if (engineLineAuditLoading) return;
+    if (!current.moves.trim() || current.id === '__draft__') {
+      setEngineLineAuditError('Selecteer of sla eerst een variant op.');
+      return;
+    }
+    setEngineLineAuditLoading(true);
+    setEngineLineAuditError('');
+    try {
+      const replay = new Chess();
+      replay.loadPgn(current.moves);
+      const moves = replay.history({ verbose: true });
+      const findings: EngineLineAudit['findings'] = [];
+      let analyzedOwnMoves = 0;
+      for (let index = 0; index < moves.length; index++) {
+        const move = moves[index];
+        const isOwnMove = current.color === 'Wit' ? move.color === 'w' : move.color === 'b';
+        if (isOwnMove && analyzedOwnMoves < 10) {
+          const analysis = await runLocalStockfish(replay.fen(), 12);
+          const actualUci = move.from + move.to + (move.promotion ?? '');
+          const bestPv = analysis.pvs[0];
+          const playedPv = analysis.pvs.find(pv => pv.moves.trim().split(/\s+/)[0] === actualUci);
+          const bestUci = bestPv?.moves.trim().split(/\s+/)[0] ?? '';
+          const sanForUci = (uci: string) => {
+            const match = uci.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
+            if (!match) return uci || 'onbekend';
+            try {
+              const copy = new Chess(replay.fen());
+              return copy.move({ from: match[1].toLowerCase() as Square, to: match[2].toLowerCase() as Square, promotion: (match[3]?.toLowerCase() ?? 'q') as 'q' | 'r' | 'b' | 'n' }).san;
+            } catch { return uci; }
+          };
+          const cpScore = (pv: { cp?: number; mate?: number }) => pv.mate !== undefined ? (pv.mate > 0 ? 10000 : -10000) : (pv.cp ?? 0);
+          let lossCp: number | null = null;
+          let status: string;
+          if (bestUci === actualUci) {
+            lossCp = 0;
+            status = 'Beste enginekeuze in deze analyse';
+          } else if (!playedPv) {
+            status = 'Niet in top 5 — exact evaluatieverlies onbekend';
+          } else {
+            lossCp = Math.max(0, cpScore(bestPv ?? {}) - cpScore(playedPv));
+            status = lossCp >= 200 ? 'Grote evaluatieafwijking — controleer tactiek' : lossCp >= 80 ? 'Mogelijk onnauwkeurig — nader bekijken' : 'Kleine evaluatieafwijking';
+          }
+          findings.push({ ply: index + 1, san: move.san, bestMove: sanForUci(bestUci), lossCp, status });
+          analyzedOwnMoves++;
+        }
+        replay.move(move);
+      }
+      setEngineLineAudits(previous => ({
+        ...previous,
+        [current.id]: { moves: current.moves, depth: 12, analyzedAt: Date.now(), findings },
+      }));
+    } catch (error) {
+      setEngineLineAuditError(error instanceof Error ? error.message : 'Stockfish kon deze variant niet analyseren.');
+    } finally {
+      setEngineLineAuditLoading(false);
+    }
+  }
+
+  async function lookupEvaluation() {
     if (evalLoading) return;
     setEvalLoading(true);
     setEvalError('');
@@ -2454,8 +2525,20 @@ function App() {
                     <p>Controleer je eigen zetten in dit repertoire tegen masterpartijen. De controle vindt ongebruikelijke of onvoldoende onderbouwde zetten, maar vervangt geen engine-analyse.</p>
                     <button className="secondary" onClick={auditRepertoireQuality} disabled={qualityLoading || !repertoireLines.length}>{qualityLoading ? 'Zetten controleren…' : 'Analyseer repertoirekwaliteit'}</button>
                   </div>
+                  <div>
+                    <p>Analyseer de geselecteerde variant lokaal met Stockfish 19 Lite. De vergelijking is indicatief: alleen zetten die in de top vijf staan krijgen een geschat evaluatieverschil.</p>
+                    <button className="primary" onClick={() => void analyzeCurrentLineWithStockfish()} disabled={engineLineAuditLoading || !current.moves.trim() || current.id === '__draft__'}>{engineLineAuditLoading ? 'Stockfish analyseert…' : 'Analyseer geselecteerde variant met Stockfish'}</button>
+                    {engineLineAuditError && <p className="training-feedback" role="status">{engineLineAuditError}</p>}
+                  </div>
                 </div>
                 {qualityAuditDone && qualityAudit.length === 0 && <div className="coverage-summary">Geen databasewaarschuwingen gevonden voor de eigen zetten in dit repertoire. Dit is geen bewijs dat alle zetten engine-technisch optimaal zijn.</div>}
+                {engineLineAudits[current.id] && engineLineAudits[current.id].moves === current.moves && <section className="coverage-results engine-line-audit-results">
+                  <div className="coverage-summary"><strong>Stockfish 19 Lite · diepte {engineLineAudits[current.id].depth}</strong> · Geanalyseerd op {new Date(engineLineAudits[current.id].analyzedAt).toLocaleString('nl-NL')}. Alleen eigen zetten, maximaal tien per variant. Dit is een screening, geen volledige partij- of blunderanalyse.</div>
+                  {engineLineAudits[current.id].findings.map(item => <div className="coverage-row" key={item.ply}>
+                    <div><strong>Zet {item.ply}: {item.san} · beste kandidaat: {item.bestMove}</strong><span>{item.status}{item.lossCp === null ? '' : ' · geschat verschil ' + (item.lossCp / 100).toFixed(2) + ' pionnen'}</span></div>
+                  </div>)}
+                </section>}
+                {engineLineAudits[current.id] && engineLineAudits[current.id].moves !== current.moves && <div className="coverage-summary">De variant is gewijzigd sinds de vorige Stockfish-analyse. Analyseer opnieuw om verouderde resultaten te vervangen.</div>}
                 {qualityAudit.length > 0 && <section className="coverage-results">
                   <div className="coverage-summary"><strong>Kwaliteitscontrole:</strong> {qualityAudit.filter(item => item.severity === 'high').length} kritieke aandachtspunten en {qualityAudit.filter(item => item.severity === 'medium').length} zetten om nader te bekijken. Dit zijn databasewaarschuwingen, geen bewezen blunders.</div>
                   {qualityAudit.map((item, index) => <div className="coverage-row" key={item.lineId + '-' + item.ply + '-' + index}>
