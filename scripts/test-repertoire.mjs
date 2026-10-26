@@ -150,7 +150,7 @@ equal(restoredBackup.repertoires[0].color, 'Wit', 'back-up bewaart repertoirekle
 equal(restoredBackup.activeRepertoireId, 'rep-1', 'back-up bewaart actieve repertoire-id');
 equal(restoredBackup.moveMemory['line-1:0'].misses, 1, 'back-up bewaart individuele zetfouten');
 equal(restoredBackup.engineLineAudits['line-1'].findings[0].lossCp, 100, 'back-up bewaart Stockfish-evaluatie');
-equal(validateBackup({ ...backup, engineLineAudits: { 'line-1': { moves: 'bad', depth: 99, analyzedAt: now, findings: [] } } }).engineLineAudits['line-1'].depth, 99, 'invalid engine data must not be accepted');
+throws(() => validateBackup({ ...backup, engineLineAudits: { 'line-1': { moves: 'bad', depth: 99, analyzedAt: now, findings: [] } } }), 'ongeldige Stockfish-back-updata wordt afgewezen');
 equal(gameFromPgn(restoredBackup.lines[0].moves).fen(), branchA.fen(), 'herstelde PGN moet dezelfde positie opleveren');
 check(!('lines' in JSON.parse('{}')), 'lege JSON is geen geldige back-up');
 check(!Array.isArray(restoredBackup.lines) || restoredBackup.lines.every(line => typeof line.id === 'string' && typeof line.moves === 'string'), 'back-upregels hebben vereiste velden');
