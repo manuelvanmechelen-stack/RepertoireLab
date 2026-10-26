@@ -1025,6 +1025,7 @@ function App() {
     id: '__draft__', repertoireId: activeRepertoireId, name: activeRepertoire?.name ?? 'Nieuw repertoire',
     color: activeRepertoire?.color ?? newColor, moves: '', tags: [], note: '', due: 0, seen: 0,
   };
+  const currentOpening = useMemo(() => identifyOpening(current.moves), [current.moves]);
   const recommendedMoves = useMemo(() => {
     if (!explorer?.moves?.length || explorerFen !== game.fen()) return [];
     const whiteToMove = game.turn() === 'w';
@@ -2718,7 +2719,7 @@ function App() {
                       <div className="study-panel-title">
                         <div className="eyebrow">STUDIEBORD</div>
                         <h2>{current.name}</h2>
-                        {identifyOpening(current.moves) && <div className="opening-name">{identifyOpening(current.moves)!.eco} · {identifyOpening(current.moves)!.name}{!identifyOpening(current.moves)!.exact ? ' · voorlopige herkenning op basis van de gespeelde zetten' : ''}</div>}
+                        {currentOpening && <div className="opening-name">{currentOpening.eco} · {currentOpening.name}{!currentOpening.exact ? ' · voorlopige herkenning op basis van de gespeelde zetten' : ''}</div>}
                         {current.id !== '__draft__' && <div className="repertoire-manage-row variant-rename-row">
                           <input aria-label="Naam van variant wijzigen" value={editingVariantName} onChange={event => setEditingVariantName(event.target.value)} placeholder={current.name} />
                           <button className="secondary" onClick={renameActiveVariant}>Hernoem variant</button>
