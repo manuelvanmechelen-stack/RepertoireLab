@@ -3003,6 +3003,34 @@ function App() {
                         <button className="primary" onClick={saveCurrentBranch}>{repertoireLines.length ? 'Variant opslaan' : 'Eerste variant opslaan'}</button>
                         <button className="secondary" disabled={!repertoireLines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
+                      {activeRepertoire && (
+                        <section className="coverage-summary" aria-label="Vervolgzetten uit repertoire">
+                          <strong>Vervolgzetten vanuit deze stelling</strong>
+                          <p className="muted">Kies een zet om de bestaande repertoiretak vanaf de huidige bordstelling te volgen. De zet wordt op het bord gespeeld; sla daarna op als nieuwe variant als je een nieuwe tak wilt bewaren.</p>
+                          {treePositionMoves.length ? (
+                            <div className="move-entry-actions">
+                              {treePositionMoves.map(move => (
+                                <button className="secondary" key={move.uci + '-' + move.san} title={'Gebruikt in: ' + move.lineNames.join(', ')} onClick={() => {
+                                  const candidate = cloneGame(game);
+                                  try {
+                                    candidate.move(move.san);
+                                    setGame(candidate);
+                                    setSelected(null);
+                                    setNotice('Repertoirezet ' + move.san + ' gespeeld. Opgeslagen in ' + move.lineNames.length + ' bestaande variant(en).');
+                                  } catch {
+                                    setNotice('Deze vervolgzet kon niet vanaf de huidige stelling worden gespeeld.');
+                                  }
+                                }}>
+                                  {move.san} <span className="muted">({move.lineIds.length})</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="muted">Geen bestaande vervolgzetten vanaf deze stelling. Speel een zet om een nieuwe vertakking te maken.</p>
+                          )}
+                          <div className="muted">Repertoire: {repertoireTree.positionCount} stellingen · {repertoireTree.branchingPositions} vertakkingspunten · {repertoireTree.transpositionPositions} transpositieposities</div>
+                        </section>
+                      )}
                       <details className="move-tree-details" open>
                         <summary>Gedeelde zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">
