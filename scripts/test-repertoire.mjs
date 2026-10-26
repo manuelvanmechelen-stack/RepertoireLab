@@ -236,6 +236,11 @@ equal(restoredBackup.activeRepertoireId, 'rep-1', 'back-up bewaart actieve reper
 equal(restoredBackup.moveMemory['line-1:0'].misses, 1, 'back-up bewaart individuele zetfouten');
 equal(restoredBackup.engineLineAudits['line-1'].findings[0].lossCp, 100, 'back-up bewaart Stockfish-evaluatie');
 throws(() => validateBackup({ ...backup, engineLineAudits: { 'line-1': { moves: 'bad', depth: 99, analyzedAt: now, findings: [] } } }), 'ongeldige Stockfish-back-updata wordt afgewezen');
+throws(() => validateBackup({ ...backup, lines: [{ ...backup.lines[0], id: ' ' }] }), 'variant zonder bruikbaar ID wordt afgewezen');
+throws(() => validateBackup({ ...backup, lines: [backup.lines[0], { ...backup.lines[0], name: 'Dubbele variant' }] }), 'dubbele variant-ID wordt afgewezen');
+throws(() => validateBackup({ ...backup, lines: [{ ...backup.lines[0], moves: 'geen geldige PGN' }] }), 'ongeldige zetten in een back-up worden afgewezen');
+throws(() => validateBackup({ ...backup, moveMemory: { 'line-1:0': { seen: -1, misses: 0, due: now, intervalDays: 0 } } }), 'negatieve herhalingsaantallen worden afgewezen');
+throws(() => validateBackup({ ...backup, moveMemory: { 'line-1:0': { seen: 1, misses: 0, due: now, intervalDays: 0, fsrsCard: { due: -1, last_review: null, stability: 1, difficulty: 1, scheduled_days: 1 } } } }), 'ongeldige FSRS-kaart in herhalingsgegevens wordt afgewezen');
 equal(gameFromPgn(restoredBackup.lines[0].moves).fen(), branchA.fen(), 'herstelde PGN moet dezelfde positie opleveren');
 check(!('lines' in JSON.parse('{}')), 'lege JSON is geen geldige back-up');
 check(!Array.isArray(restoredBackup.lines) || restoredBackup.lines.every(line => typeof line.id === 'string' && typeof line.moves === 'string'), 'back-upregels hebben vereiste velden');
