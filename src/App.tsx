@@ -1908,8 +1908,29 @@ function App() {
   function restoreBackupData(raw: unknown, askConfirmation = true) {
     const validated = validateBackup(raw);
     if (askConfirmation && !window.confirm('De huidige gegevens vervangen door deze back-up? Exporteer eerst een back-up om gegevens te bewaren.')) return false;
-    setLines(validated.lines); setRepertoires(validated.repertoires); setActiveRepertoireId(validated.activeRepertoireId);
-    setMissedMoves(validated.missedMoves); setMoveMemory(validated.moveMemory); setEngineLineAudits(validated.engineLineAudits);
+    // validateBackup performs runtime validation; normalize its JavaScript-inferred
+    // shapes into the exact TypeScript state models used by the application.
+    const restoredLines: Line[] = validated.lines.map((line): Line => ({
+      id: line.id,
+      repertoireId: line.repertoireId,
+      name: line.name,
+      color: line.color,
+      moves: line.moves,
+      tags: line.tags,
+      note: line.note,
+      due: line.due,
+      seen: line.seen,
+      intervalDays: line.intervalDays,
+      fsrsCard: line.fsrsCard as FsrsCardState | undefined,
+    }));
+    const restoredMoveMemory = Object.fromEntries(
+      Object.entries(validated.moveMemory).map(([key, entry]) => [
+        key,
+        { ...entry, fsrsCard: entry.fsrsCard as FsrsCardState | undefined },
+      ]),
+    ) as typeof moveMemory;
+    setLines(restoredLines); setRepertoires(validated.repertoires); setActiveRepertoireId(validated.activeRepertoireId);
+    setMissedMoves(validated.missedMoves); setMoveMemory(restoredMoveMemory); setEngineLineAudits(validated.engineLineAudits);
     setActive(''); setGame(newGame()); setSelected(null); setNotice('Back-up volledig gecontroleerd en teruggezet.');
     return true;
   }
