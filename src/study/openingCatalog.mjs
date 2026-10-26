@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js';
 import { LICHESS_OPENINGS } from './lichessOpenings.mjs';
 
 // Compact offline ECO recognition catalogue. Move sequences are replayed by chess.js;
@@ -50,10 +51,10 @@ const OPENINGS = [
 const NORMALIZE = san => String(san ?? '').replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
 
 const parsePgnMoves = pgn => String(pgn ?? '')
-  .replace(/\\{[^}]*\\}/g, ' ')
-  .replace(/;[^\\n]*/g, ' ')
-  .split(/\\s+/)
-  .filter(token => token && !/^\\d+\\.(?:\\.\\.)?$/.test(token) && !/^(?:1-0|0-1|1\\/2-1\\/2|\\*)$/.test(token))
+  .replace(/\{[^}]*\}/g, ' ')
+  .replace(/;[^\n]*/g, ' ')
+  .split(/\s+/)
+  .filter(token => token && !/^\d+\.(?:\.\.)?$/.test(token) && !/^(?:1-0|0-1|1\\/2-1\\/2|\\*)$/.test(token))
   .map(NORMALIZE);
 
 // Lichess's CC0 ECO dataset supplies broad offline coverage. Hand-picked entries
