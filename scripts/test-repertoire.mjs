@@ -264,7 +264,10 @@ const dashboardMetrics = calculateRepertoireMetrics([
   'a:0': { seen: 4, misses: 1, due: 100 },
   'a:2': { seen: 2, misses: 0, due: 9_000_000_000_000 },
   'unknown:0': { seen: 100, misses: 0, due: 0 },
-}, 1_000);
+}, 1_000, {
+  a: { moves: '1. e4 e5 2. Nf3 Nc6 3. Bb5', findings: [{ lossCp: 0 }, { lossCp: 100 }, { lossCp: null }, { lossCp: 220 }] },
+  b: { moves: 'stale line', findings: [{ lossCp: 0 }] },
+});
 equal(dashboardMetrics.validLines, 2, 'dashboard sluit ongeldige lijnen uit');
 equal(dashboardMetrics.moveCount, 10, 'dashboard telt halve zetten uit geldige lijnen');
 equal(dashboardMetrics.uniquePositions, 5, 'dashboard dedupliceert gedeelde stellingen');
@@ -275,6 +278,11 @@ equal(dashboardMetrics.totalAttempts, 6, 'dashboard negeert trainingsdata van on
 equal(dashboardMetrics.totalMisses, 1, 'dashboard telt historische fouten veilig');
 equal(dashboardMetrics.accuracy, 83, 'dashboard berekent nauwkeurigheid uit pogingen');
 equal(dashboardMetrics.dueMoves, 1, 'dashboard telt vervallen individuele zetten');
+equal(dashboardMetrics.engineAuditMoves, 4, 'dashboard telt alleen analyses van ongewijzigde lijnen');
+equal(dashboardMetrics.engineComparableMoves, 3, 'dashboard sluit niet-vergelijkbare enginezetten uit');
+equal(dashboardMetrics.engineConsistency, 33, 'dashboard berekent beperkte engineconsistentie transparant');
+equal(dashboardMetrics.engineOutliers, 1, 'dashboard telt grote engine-afwijkingen');
+equal(calculateRepertoireMetrics([{ id: 'a', moves: '1. e4 e5' }], {}, 1_000).engineConsistency, null, 'geen engine-score zonder geldige screening');
 equal(calculateRepertoireMetrics([], {}).accuracy, null, 'dashboard toont geen verzonnen nauwkeurigheid zonder pogingen');
 
 
