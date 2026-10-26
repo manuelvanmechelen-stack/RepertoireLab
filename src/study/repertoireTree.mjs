@@ -13,7 +13,7 @@ export function buildRepertoireTree(lines = []) {
   const rootKey = positionKey(start);
   nodes.set(rootKey, {
     key: rootKey, fen: start.fen(), ply: 0,
-    incoming: [], moves: new Map(), lineIds: new Set(),
+    incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(), pathSignatures: new Set(['']),
   });
   let validLines = 0;
   let invalidLines = 0;
@@ -34,15 +34,17 @@ export function buildRepertoireTree(lines = []) {
         const beforeKey = positionKey(cursor);
         const before = nodes.get(beforeKey) ?? {
           key: beforeKey, fen: cursor.fen(), ply: cursor.history().length,
-          incoming: [], moves: new Map(), lineIds: new Set(),
+          incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
+        before.pathSignatures.add(cursor.history().join(' '));
         nodes.set(beforeKey, before);
         const played = cursor.move(move);
         const afterKey = positionKey(cursor);
         const after = nodes.get(afterKey) ?? {
           key: afterKey, fen: cursor.fen(), ply: cursor.history().length,
-          incoming: [], moves: new Map(), lineIds: new Set(),
+          incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
+        after.pathSignatures.add(cursor.history().join(' '));
         nodes.set(afterKey, after);
         const existing = before.moves.get(played.san) ?? {
           san: played.san, uci: played.from + played.to + (played.promotion ?? ''),
@@ -68,9 +70,9 @@ export function buildRepertoireTree(lines = []) {
   const positions = [...nodes.values()];
   const edges = positions.reduce((sum, node) => sum + node.moves.size, 0);
   const branchingPositions = positions.filter(node => node.moves.size > 1).length;
-  const transpositionPositions = positions.filter(node => node.incoming.length > 1).length;
+  const transpositionPositions = positions.filter(node => node.pathSignatures.size > 1).length;
   const publicNode = node => ({
-    key: node.key, fen: node.fen, ply: node.ply,
+    key: node.key, fen: node.fen, ply: node.ply, pathCount: node.pathSignatures.size,
     incoming: node.incoming.map(edge => ({ ...edge })),
     moves: [...node.moves.values()].map(edge => ({
       ...edge, lineIds: [...edge.lineIds], lineNames: [...edge.lineNames],
