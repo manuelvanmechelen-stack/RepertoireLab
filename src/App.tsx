@@ -9,6 +9,7 @@ import { rankCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
+import { identifyOpening } from './study/openingCatalog.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
   BarChart3,
@@ -973,6 +974,7 @@ function App() {
   });
   const [engineLineAuditLoading, setEngineLineAuditLoading] = useState(false);
   const [engineLineAuditError, setEngineLineAuditError] = useState('');
+  const [engineAuditDepth, setEngineAuditDepth] = useState(16);
 
   useEffect(() => {
     localStorage.setItem('repertoirelab-lines-v1', JSON.stringify(lines));
@@ -2082,8 +2084,8 @@ function App() {
       for (let index = 0; index < moves.length; index++) {
         const move = moves[index];
         const isOwnMove = current.color === 'Wit' ? move.color === 'w' : move.color === 'b';
-        if (isOwnMove && analyzedOwnMoves < 10) {
-          const analysis = await runLocalStockfish(replay.fen(), 12);
+        if (isOwnMove && analyzedOwnMoves < 16) {
+          const analysis = await runLocalStockfish(replay.fen(), engineAuditDepth);
           const actualUci = move.from + move.to + (move.promotion ?? '');
           const bestPv = analysis.pvs[0];
           const playedPv = analysis.pvs.find(pv => pv.moves.trim().split(/\s+/)[0] === actualUci);
@@ -2115,7 +2117,7 @@ function App() {
       }
       setEngineLineAudits(previous => ({
         ...previous,
-        [current.id]: { moves: current.moves, depth: 12, analyzedAt: Date.now(), findings },
+        [current.id]: { moves: current.moves, depth: engineAuditDepth, analyzedAt: Date.now(), findings },
       }));
     } catch (error) {
       setEngineLineAuditError(error instanceof Error ? error.message : 'Stockfish kon deze variant niet analyseren.');
@@ -2543,13 +2545,14 @@ function App() {
                   </div>
                   <div>
                     <p>Analyseer de geselecteerde variant lokaal met Stockfish 19 Lite. De vergelijking is indicatief: alleen zetten die in de top vijf staan krijgen een geschat evaluatieverschil.</p>
+                    <label>Stockfish-diepte voor variantaudit <select value={engineAuditDepth} onChange={event => setEngineAuditDepth(Number(event.target.value))} disabled={engineLineAuditLoading}><option value={12}>Snel · 12</option><option value={16}>Normaal · 16</option><option value={20}>Diep · 20</option></select></label>
                     <button className="primary" onClick={() => void analyzeCurrentLineWithStockfish()} disabled={engineLineAuditLoading || !current.moves.trim() || current.id === '__draft__'}>{engineLineAuditLoading ? 'Stockfish analyseert…' : 'Analyseer geselecteerde variant met Stockfish'}</button>
                     {engineLineAuditError && <p className="training-feedback" role="status">{engineLineAuditError}</p>}
                   </div>
                 </div>
                 {qualityAuditDone && qualityAudit.length === 0 && <div className="coverage-summary">Geen databasewaarschuwingen gevonden voor de eigen zetten in dit repertoire. Dit is geen bewijs dat alle zetten engine-technisch optimaal zijn.</div>}
                 {engineLineAudits[current.id] && engineLineAudits[current.id].moves === current.moves && <section className="coverage-results engine-line-audit-results">
-                  <div className="coverage-summary"><strong>Stockfish 19 Lite · diepte {engineLineAudits[current.id].depth}</strong> · Geanalyseerd op {new Date(engineLineAudits[current.id].analyzedAt).toLocaleString('nl-NL')}. Alleen eigen zetten, maximaal tien per variant. Dit is een screening, geen volledige partij- of blunderanalyse.</div>
+                  <div className="coverage-summary"><strong>Stockfish 19 Lite · diepte {engineLineAudits[current.id].depth}</strong> · Geanalyseerd op {new Date(engineLineAudits[current.id].analyzedAt).toLocaleString('nl-NL')}. Alleen eigen zetten, maximaal zestien per variant. Dit is een screening, geen volledige partij- of blunderanalyse.</div>
                   {engineLineAudits[current.id].findings.map(item => <div className="coverage-row" key={item.ply}>
                     <div><strong>Zet {item.ply}: {item.san} · beste kandidaat: {item.bestMove}</strong><span>{item.status}{item.lossCp === null ? '' : ' · geschat verschil ' + (item.lossCp / 100).toFixed(2) + ' pionnen'}</span></div>
                   </div>)}
@@ -2701,6 +2704,7 @@ function App() {
                       <div className="study-panel-title">
                         <div className="eyebrow">STUDIEBORD</div>
                         <h2>{current.name}</h2>
+                        {identifyOpening(current.moves) && <div className="opening-name">{identifyOpening(current.moves)!.eco} · {identifyOpening(current.moves)!.name}{!identifyOpening(current.moves)!.exact ? ' · voorlopige herkenning op basis van de gespeelde zetten' : ''}</div>}
                         {current.id !== '__draft__' && <div className="repertoire-manage-row variant-rename-row">
                           <input aria-label="Naam van variant wijzigen" value={editingVariantName} onChange={event => setEditingVariantName(event.target.value)} placeholder={current.name} />
                           <button className="secondary" onClick={renameActiveVariant}>Hernoem variant</button>
