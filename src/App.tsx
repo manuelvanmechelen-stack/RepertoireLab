@@ -1191,6 +1191,51 @@ function App() {
     }
   }
 
+  function addAllCoverageSuggestions() {
+    if (!activeRepertoire) {
+      setNotice('Selecteer eerst het repertoire waarin je de vertakkingen wilt opslaan.');
+      return;
+    }
+    const signatures = new Set<string>();
+    for (const existing of repertoireLines) {
+      try { signatures.add(newGame(existing.moves).history().join(' ')); } catch { /* Ignore malformed legacy lines. */ }
+    }
+    const additions: Line[] = [];
+    const limit = 100;
+    for (const line of repertoireLines) {
+      if (additions.length >= limit) break;
+      const result = coverage[line.id];
+      if (!result || result.error || !result.suggestions?.length) continue;
+      for (const suggestion of result.suggestions) {
+        if (additions.length >= limit) break;
+        try {
+          const position = newGame(line.moves);
+          position.move(suggestion.san);
+          const signature = position.history().join(' ');
+          if (signatures.has(signature)) continue;
+          signatures.add(signature);
+          additions.push({
+            id: crypto.randomUUID(),
+            repertoireId: line.repertoireId ?? activeRepertoireId,
+            name: line.name + ' — ' + suggestion.san,
+            color: line.color,
+            moves: position.pgn(),
+            tags: [...new Set([...line.tags, 'Database-vertakking'])],
+            note: 'Automatisch voorgesteld op basis van partijfrequentie uit ' + (coverageSource === 'masters' ? 'de Lichess-masterdatabase' : 'de Lichess-partijdatabase op ratingniveau ' + (ratingBand === 'all' ? 'alle ratings' : ratingBand)) + '. Controleer de zet, de engine-evaluatie en het strategische plan voordat je deze variant leert.',
+            due: 0,
+            seen: 0,
+          });
+        } catch { /* Skip illegal or malformed suggestions; retain other valid candidates. */ }
+      }
+    }
+    if (!additions.length) {
+      setNotice('Er zijn geen nieuwe, geldige vervolgen om toe te voegen. Controleer eerst de database of de bestaande varianten.');
+      return;
+    }
+    setLines(previous => [...previous, ...additions]);
+    setNotice(additions.length + ' databasevertakkingen toegevoegd. De uitbreiding is beperkt tot de getoonde vervolgen; controleer ze voordat je verder aanvult.');
+  }
+
   async function auditRepertoireQuality() {
     if (qualityLoading || !repertoireLines.length) return;
     setQualityLoading(true);
@@ -2609,6 +2654,8 @@ function App() {
                     Repertoirediepte: {Math.round(Object.values(coverage).filter(item => !item.error && item.games > 0 && item.games <= positionGoal).length / Math.max(1, Object.keys(coverage).length) * 100)}% van de gecontroleerde lijnen zit onder je frequentiedoel. Dit meet dekking/diepte, niet de objectieve schaakkwaliteit.
                   </div>
                   <div className="coverage-results">
+                    <div className="coverage-summary">Automatisch aanvullen voegt maximaal 100 nieuwe vertakkingen toe op basis van de zichtbare database-aanbevelingen. Het kiest geen engine-beste zet en breidt niet stilzwijgend verder uit dan deze gecontroleerde posities.</div>
+                    <button className="primary" onClick={addAllCoverageSuggestions} disabled={!activeRepertoire || coverageLoading || !Object.values(coverage).some(item => !item.error && item.suggestions?.length)}>Voeg alle voorgestelde vertakkingen toe</button>
                     <div className="coverage-summary">
                       {Object.values(coverage).filter(item => !item.error && item.games > 0 && item.games <= positionGoal).length} van {repertoireLines.length} lijnen hebben een eindstelling met maximaal {positionGoal.toLocaleString('nl-NL')} partijen in {coverageSource === 'masters' ? 'de masterdatabase' : ('Lichess bij ratingniveau ' + (ratingBand === 'all' ? 'alle ratings' : ratingBand))}.
                     </div>
