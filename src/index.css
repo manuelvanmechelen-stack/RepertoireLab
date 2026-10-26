@@ -1851,6 +1851,7 @@ textarea:focus-visible {
 
 /* Repertoire analytics, model games, and review polish */
 .repertoire-insights,.model-games{margin:18px 0;padding:18px;border:1px solid #34313f;border-radius:13px;background:linear-gradient(135deg,#1d1c26,#191a21 70%)}
+.repertoire-tree-panel{margin-top:18px;padding:16px;border:1px solid #34313f;border-radius:11px;background:#191a21}.repertoire-tree-panel .insights-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.repertoire-tree-panel .coverage-summary{line-height:1.7}.repertoire-tree-panel .text-button{margin-left:8px}
 .insights-heading,.model-games-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .insights-heading h3{font:700 17px Manrope,sans-serif;margin:7px 0}
 .insights-heading p,.model-games>p{font-size:11px;line-height:1.6;color:#9e9eaf;margin:6px 0 0;max-width:650px}
