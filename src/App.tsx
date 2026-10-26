@@ -958,6 +958,11 @@ function App() {
   });
   const [showOpeningIdeas, setShowOpeningIdeas] = useState(true);
   const [trainingPly, setTrainingPly] = useState(0);
+  const [dailyTraining, setDailyTraining] = useState(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    try { const saved = JSON.parse(localStorage.getItem('repertoirelab-daily-training-v1') ?? 'null'); return saved?.date === today && Number.isFinite(saved?.count) ? saved : { date: today, count: 0 }; }
+    catch { return { date: today, count: 0 }; }
+  });
   const [trainingInput, setTrainingInput] = useState('');
   const [trainingFeedback, setTrainingFeedback] = useState('');
   const [trainingComplete, setTrainingComplete] = useState(false);
@@ -1002,6 +1007,7 @@ function App() {
     localStorage.setItem('repertoirelab-missed-moves-v1', JSON.stringify(missedMoves));
   }, [missedMoves]);
   useEffect(() => { localStorage.setItem('repertoirelab-move-memory-v1', JSON.stringify(moveMemory)); }, [moveMemory]);
+  useEffect(() => { localStorage.setItem('repertoirelab-daily-training-v1', JSON.stringify(dailyTraining)); }, [dailyTraining]);
   useEffect(() => { localStorage.setItem('repertoirelab-engine-line-audits-v1', JSON.stringify(engineLineAudits)); }, [engineLineAudits]);
   useEffect(() => {
     if (explorerToken.trim()) localStorage.setItem('repertoirelab-lichess-token-v1', explorerToken.trim());
@@ -1838,6 +1844,8 @@ function App() {
   function resetMoveTraining() { setTrainingPly(0); setTrainingInput(''); setTrainingFeedback(''); setTrainingComplete(false); setTrainingSelected(null); setTrainingBoardFen('start'); if (review) prepareBoardTraining(review); }
   function trainResult(grade: LineGrade) {
     if (!review) return;
+    const today = new Date().toISOString().slice(0, 10);
+    setDailyTraining(previous => ({ date: today, count: (previous.date === today ? previous.count : 0) + 1 }));
     const remembered = grade !== 'again';
     if (!remembered) setMissedMoves(previous => ({ ...previous, [review.id]: (previous[review.id] ?? 0) + 1 }));
     const recentMoveMisses = Object.entries(moveMemory).filter(([key, item]) => key.startsWith(review.id + ':') && item.lastResult === 'miss' && item.due > Date.now() - 7 * 86400000).length;
@@ -3326,11 +3334,11 @@ function App() {
                     <div className="session-progress">
                       <div>
                         <span>Voortgang van vandaag</span>
-                        <b>{totalSeen} herhalingen</b>
+                        <b>{dailyTraining.count} beoordeelde varianten</b>
                       </div>
                       <div className="progress-track">
                         <div
-                          style={{ width: Math.min(100, totalSeen * 8) + '%' }}
+                          style={{ width: Math.min(100, dailyTraining.count * 8) + '%' }}
                         />
                       </div>
                     </div>
