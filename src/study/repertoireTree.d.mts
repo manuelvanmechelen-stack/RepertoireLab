@@ -12,6 +12,7 @@ export type RepertoireTreeNode = {
   key: string;
   fen: string;
   ply: number;
+  pathCount: number;
   incoming: Array<{ fromKey: string; san: string }>;
   moves: RepertoireTreeEdge[];
   lineIds: string[];
