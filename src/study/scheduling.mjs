@@ -73,3 +73,41 @@ export function scheduleLineGrade(previous, grade, recentMoveMisses = 0, now = D
 
   return { seen, intervalDays, due, lastGrade: grade };
 }
+
+
+// FSRS v6 scheduler used by interactive move and line reviews.
+// Card state is stored as JSON-safe timestamps so it survives local/cloud backups.
+import { createEmptyCard, fsrs, Rating } from 'ts-fsrs';
+
+const fsrsScheduler = fsrs({ request_retention: 0.9, maximum_interval: 120, enable_fuzz: false, enable_short_term: true, learning_steps: ['5m'], relearning_steps: ['5m'] });
+const fsrsRating = { again: Rating.Again, hard: Rating.Hard, good: Rating.Good, easy: Rating.Easy };
+
+function restoreFsrsCard(previous, now) {
+  const saved = previous?.fsrsCard;
+  if (saved && typeof saved === 'object' && Number.isFinite(saved.due)) {
+    return { ...saved, due: new Date(saved.due), last_review: Number.isFinite(saved.last_review) ? new Date(saved.last_review) : null };
+  }
+  return createEmptyCard(new Date(now));
+}
+
+function saveFsrsCard(card) {
+  return { ...card, due: card.due instanceof Date ? card.due.getTime() : new Date(card.due).getTime(), last_review: card.last_review ? (card.last_review instanceof Date ? card.last_review.getTime() : new Date(card.last_review).getTime()) : null };
+}
+
+export function scheduleFsrsMoveResult(previous, remembered, now = Date.now()) {
+  const rating = remembered ? Rating.Good : Rating.Again;
+  const prior = restoreFsrsCard(previous, now);
+  const result = fsrsScheduler.next(prior, new Date(now), rating);
+  const fsrsCard = saveFsrsCard(result.card);
+  const seen = (previous?.seen ?? 0) + 1;
+  const misses = (previous?.misses ?? 0) + (remembered ? 0 : 1);
+  return { seen, misses, due: fsrsCard.due, intervalDays: Math.max(0, Number(result.card.scheduled_days) || 0), lastResult: remembered ? 'good' : 'miss', fsrsCard };
+}
+
+export function scheduleFsrsLineGrade(previous, grade, now = Date.now()) {
+  const rating = fsrsRating[grade];
+  if (!rating) throw new Error('Onbekende trainingsbeoordeling: ' + grade);
+  const result = fsrsScheduler.next(restoreFsrsCard(previous, now), new Date(now), rating);
+  const fsrsCard = saveFsrsCard(result.card);
+  return { seen: (previous?.seen ?? 0) + 1, intervalDays: Math.max(0, Number(result.card.scheduled_days) || 0), due: fsrsCard.due, lastGrade: grade, fsrsCard };
+}
