@@ -3,6 +3,7 @@ import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleMoveResult, scheduleLineResult, selectDueOwnPly } from './study/scheduling.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
+import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
@@ -1294,23 +1295,13 @@ function App() {
       });
       if (!response.ok) throw new Error(response.status === 404 ? 'Lichess-gebruiker niet gevonden.' : 'Lichess gaf fout ' + response.status + '.');
       const pgnText = await response.text();
-      const chunks = pgnText.split(/(?=\[Event )/).filter(chunk => chunk.includes('\n\n') || chunk.includes('\r\n\r\n'));
+      const chunks = splitPgnCollection(pgnText);
       const report: string[] = [];
       for (const chunk of chunks.slice(0, 30)) {
-        const parsed = new Chess();
-        try { parsed.loadPgn(chunk); } catch { continue; }
-        const history = parsed.history();
-        if (!history.length) continue;
-        let bestMatch: { name: string; length: number } | null = null;
-        for (const line of lines) {
-          const lineMoves = newGame(line.moves).history();
-          let shared = 0;
-          while (shared < Math.min(history.length, lineMoves.length) && history[shared] === lineMoves[shared]) shared++;
-          if (shared >= 4 && (!bestMatch || shared > bestMatch.length)) bestMatch = { name: line.name, length: shared };
-        }
-        const headers = parsed.header();
-        report.push((headers.White ?? 'Wit') + ' – ' + (headers.Black ?? 'Zwart') + ' (' + (headers.Result ?? '*') + '): ' +
-          (bestMatch ? 'repertoire gevolgd tot zet ' + Math.ceil(bestMatch.length / 2) + ' — ' + bestMatch.name : 'geen directe match met opgeslagen lijnen; controleer op afwijking'));
+        try {
+          const analysis = analyzeGameAgainstRepertoire(chunk, lines);
+          report.push(analysis.summary);
+        } catch { /* Ignore an individual malformed game and continue the report. */ }
       }
       setGameReview(report.length ? report : ['Geen leesbare partijen gevonden in de export.']);
     } catch (error) {
@@ -1338,21 +1329,11 @@ function App() {
       const recent = [...(gamesData.games ?? [])].sort((a, b) => (b.end_time ?? 0) - (a.end_time ?? 0)).slice(0, 25);
       for (const item of recent) {
         if (!item.pgn) continue;
-        const parsed = new Chess();
-        try { parsed.loadPgn(item.pgn); } catch { continue; }
-        const history = parsed.history();
-        if (!history.length) continue;
-        let bestMatch: { name: string; length: number } | null = null;
-        for (const line of lines) {
-          const lineMoves = newGame(line.moves).history();
-          let shared = 0;
-          while (shared < Math.min(history.length, lineMoves.length) && history[shared] === lineMoves[shared]) shared++;
-          if (shared >= 4 && (!bestMatch || shared > bestMatch.length)) bestMatch = { name: line.name, length: shared };
-        }
-        const headers = parsed.header();
-        const date = headers.Date && headers.Date !== '????.??.??' ? headers.Date : 'datum onbekend';
-        report.push(date + ' · ' + (headers.White ?? item.white?.username ?? 'Wit') + ' – ' + (headers.Black ?? item.black?.username ?? 'Zwart') + ' (' + (headers.Result ?? '*') + '): ' +
-          (bestMatch ? 'repertoire gevolgd tot ply ' + bestMatch.length + ' — ' + bestMatch.name : 'geen directe match met opgeslagen lijnen; controleer de openingsafwijking'));
+        try {
+          const analysis = analyzeGameAgainstRepertoire(item.pgn, lines);
+          const date = analysis.summary;
+          report.push((item.end_time ? new Date(item.end_time * 1000).toLocaleDateString('nl-NL') + ' · ' : '') + date);
+        } catch { /* Ignore an individual malformed game and continue the report. */ }
       }
       setChessComReview(report.length ? report : ['Geen leesbare partijen in het meest recente openbare maandarchief.']);
     } catch (error) {
