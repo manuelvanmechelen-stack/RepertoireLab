@@ -9,6 +9,7 @@ type Backup = {
   activeRepertoireId: string;
   missedMoves: unknown;
   moveMemory: unknown;
+  engineLineAudits: unknown;
 };
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '');
