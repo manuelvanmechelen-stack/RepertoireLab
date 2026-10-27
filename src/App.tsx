@@ -1964,6 +1964,7 @@ function App() {
   function isOwnTrainingPly(ply: number, color: 'Wit' | 'Zwart') { return color === 'Wit' ? ply % 2 === 0 : ply % 2 === 1; }
   function prepareBoardTraining(line: Line | null = review) {
     if (!line) return;
+    setRevealed(false);
     try {
       const san = newGame(line.moves).history(); const replay = new Chess(); let ply = 0;
       // Start at the earliest due move when the whole line is not yet due.
@@ -3504,8 +3505,12 @@ function App() {
                         </p>
                       </div>
                     )}
+                    {!trainingComplete && (
+                      <p className="muted training-reveal-hint">Speel eerst alle eigen zetten op het bord om het antwoord vrij te geven.</p>
+                    )}
                     <button
                       className="primary reveal-btn"
+                      disabled={!trainingComplete}
                       onClick={() => setRevealed(v => !v)}
                     >
                       {revealed ? 'Verberg antwoord' : 'Toon zetten en plan'}
