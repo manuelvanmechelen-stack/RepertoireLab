@@ -4,6 +4,7 @@ import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrs
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
+import { validateCloudBackupPayload } from '../src/study/cloudBackup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
@@ -442,5 +443,13 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+// 13. Cloud backup uploads/restores must validate the complete payload, not just its envelope.
+const validCloudPayload = { ...backup, app: 'RepertoireLab', version: 2, exportedAt: new Date(fixedNow).toISOString() };
+equal(validateCloudBackupPayload(validCloudPayload), validCloudPayload, 'geldige volledige back-up is geschikt voor cloudsynchronisatie');
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, app: 'OtherApp' }), 'cloud weigert een back-up van een andere app');
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [{ ...backup.lines[0], moves: '1. e4 Qh9' }] }), 'cloud weigert een ongeldige variant vóór upload');
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [backup.lines[0], { ...backup.lines[0], name: 'Dubbele variant' }] }), 'cloud weigert dubbele variant-ID’s vóór upload');
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, moveMemory: { 'line-1:0': { seen: -1, misses: 0, due: fixedNow, intervalDays: 0 } } }), 'cloud weigert ongeldige spaced-repetition-data vóór upload');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
