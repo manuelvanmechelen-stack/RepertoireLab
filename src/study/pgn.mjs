@@ -23,7 +23,8 @@ export function splitPgnCollection(input) {
       completed = false;
     }
     current.push(line);
-    if (hasResult(line)) completed = true;
+    // A Result tag is metadata, not the end of the game's movetext.
+    if (!isTag && hasResult(line)) completed = true;
   }
   if (current.some(line => line.trim())) chunks.push(current.join('\n').trim());
   return chunks.filter(Boolean);
