@@ -455,4 +455,17 @@ const customFenMoves = getRepertoireContinuations(customFenTree, customStartFen)
 check(customFenMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling toont de opgeslagen vervolgzet');
 check(!getRepertoireContinuations(customFenTree, new Chess().fen()).some(move => move.san === 'c5'), 'custom-FEN-variant vervuilt de standaard beginstelling niet');
 
+// 14. Identical board placement with different castling rights must not be merged as a transposition.
+const customFenNoCastling = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b - - 0 1';
+const castlingRightsTree = buildRepertoireTree([
+  { id: 'fen-castling', name: 'FEN met rokaderechten', moves: '[SetUp "1"]\n[FEN "' + customStartFen + '"]\n\n1... c5 *' },
+  { id: 'fen-no-castling', name: 'FEN zonder rokaderechten', moves: '[SetUp "1"]\n[FEN "' + customFenNoCastling + '"]\n\n1... e5 *' },
+]);
+const withCastlingMoves = getRepertoireContinuations(castlingRightsTree, customStartFen);
+const withoutCastlingMoves = getRepertoireContinuations(castlingRightsTree, customFenNoCastling);
+check(withCastlingMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling met rokaderechten behoudt eigen vervolgzetten');
+check(!withCastlingMoves.some(move => move.san === 'e5'), 'stelling met rokaderechten neemt geen zet uit andere FEN over');
+check(withoutCastlingMoves.some(move => move.san === 'e5'), 'custom-FEN-stelling zonder rokaderechten behoudt eigen vervolgzetten');
+check(!withoutCastlingMoves.some(move => move.san === 'c5'), 'stelling zonder rokaderechten neemt geen zet uit andere FEN over');
+
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
