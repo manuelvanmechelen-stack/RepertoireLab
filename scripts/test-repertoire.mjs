@@ -355,7 +355,9 @@ equal(splitPgnCollection('[Event "Eén"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *
 const resultHeaderFirstCollection = '[Result "1-0"]\n[Site "Club"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 1-0\n[Site "Club"]\n[White "C"]\n[Black "D"]\n\n1. d4 d5 0-1';
 const resultHeaderChunks = splitPgnCollection(resultHeaderFirstCollection);
 equal(resultHeaderChunks.length, 2, 'Result-tag vóór andere headers splitst een PGN-verzameling niet voortijdig');
-check(resultHeaderChunks[0].includes('[Result "1-0"]') && resultHeaderChunks[0].includes('[Black "A"]'), 'alle headers blijven bij de eerste partij wanneer Result vooraan staat');
+check(resultHeaderChunks[0].includes('[Result "1-0"]') && resultHeaderChunks[0].includes('[Black "B"]'), 'alle headers blijven bij de eerste partij wanneer Result vooraan staat');
+check(!resultHeaderChunks[0].includes('[White "C"]'), 'headers van de tweede partij lekken niet naar de eerste partij');
+check(resultHeaderChunks[1].includes('[White "C"]') && resultHeaderChunks[1].includes('[Black "D"]'), 'headers van de tweede partij blijven samen na de resultaatgrens');
 
 
 // 11. Exercise the exact backup validator used by the restore UI.
