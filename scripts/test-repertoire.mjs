@@ -7,6 +7,7 @@ import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
+import { analyzeTranspositions } from '../src/study/transpositions.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
@@ -467,5 +468,19 @@ check(withCastlingMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling me
 check(!withCastlingMoves.some(move => move.san === 'e5'), 'stelling met rokaderechten neemt geen zet uit andere FEN over');
 check(withoutCastlingMoves.some(move => move.san === 'e5'), 'custom-FEN-stelling zonder rokaderechten behoudt eigen vervolgzetten');
 check(!withoutCastlingMoves.some(move => move.san === 'c5'), 'stelling zonder rokaderechten neemt geen zet uit andere FEN over');
+
+
+// 15. Transposition analysis must replay custom-FEN games from their declared start.
+const afterE4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const fenTranspositions = analyzeTranspositions([
+  { id: 'standard-e4-e5', name: 'Standaard e4-e5', moves: '1. e4 e5' },
+  { id: 'custom-after-e4', name: 'Vanaf FEN na e4', moves: '[SetUp "1"]\\n[FEN "' + afterE4Fen + '"]\\n\\n1... e5 *' },
+]);
+const afterE5 = new Chess(afterE4Fen);
+play(afterE5, 'e5', 'custom-FEN-transpositie');
+const sharedFenPosition = fenTranspositions.find(item => item.fen === positionKey(afterE5));
+check(sharedFenPosition, 'transpositie-analyse neemt de custom-FEN-voortzetting mee');
+equal(sharedFenPosition.paths, 2, 'standaard- en custom-FEN-route naar dezelfde stelling worden als twee paden herkend');
+check(sharedFenPosition.names.includes('Vanaf FEN na e4'), 'transpositie-analyse bewaart de naam van de custom-FEN-variant');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
