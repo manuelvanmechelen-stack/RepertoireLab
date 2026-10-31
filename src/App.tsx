@@ -8,6 +8,7 @@ import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
+import { analyzeTranspositions } from './study/transpositions.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
 import { evaluationLossCp } from './study/engineAudit.mjs';
@@ -839,6 +840,18 @@ function newGame(moves?: string) {
   return game;
 }
 
+// Duplicate detection must include the starting position as well as the SAN path.
+// Identical SAN sequences from a custom FEN are not the same repertoire line.
+function movePathSignature(game: Chess) {
+  const headers = game.getHeaders();
+  const startFen = headers.FEN ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  return startFen + '|' + game.history().join(' ');
+}
+
+function signatureFromPgn(pgn: string) {
+  return movePathSignature(newGame(pgn));
+}
+
 // Clone the complete move history, not just the current FEN. Loading only FEN
 // discards earlier moves and makes saved variants/undo contain only the last move.
 function cloneGame(source: Chess) {
@@ -849,24 +862,6 @@ function cloneGame(source: Chess) {
   }
   copy.load(source.fen());
   return copy;
-}
-function positionSignature(game: Chess) { return game.fen().split(' ').slice(0, 4).join(' '); }
-function analyzeTranspositions(lines: Line[]) {
-  const positions = new Map<string, { histories: Set<string>; names: Set<string>; ply: number }>();
-  for (const line of lines) {
-    try {
-      const game = new Chess(); const history: string[] = [];
-      for (const move of newGame(line.moves).history({ verbose: true })) {
-        game.move(move.san); history.push(move.san);
-        const key = positionSignature(game);
-        const item = positions.get(key) ?? { histories: new Set<string>(), names: new Set<string>(), ply: history.length };
-        item.histories.add(history.join(' ')); item.names.add(line.name); item.ply = Math.min(item.ply, history.length); positions.set(key, item);
-      }
-    } catch { /* skip invalid legacy PGNs */ }
-  }
-  return [...positions.entries()].filter(([, item]) => item.histories.size > 1)
-    .map(([fen, item]) => ({ fen, paths: item.histories.size, names: [...item.names], ply: item.ply }))
-    .sort((a, b) => b.names.length - a.names.length || a.ply - b.ply).slice(0, 20);
 }
 function parseStrictPgn(pgn: string): Chess {
   const game = new Chess();
@@ -1689,7 +1684,7 @@ function App() {
       setNotice('Deze zet is niet legaal in de huidige stelling.');
       return;
     }
-    const signature = candidate.history().join(' ');
+    const signature = movePathSignature(candidate);
     const duplicate = repertoireLines.find(line => {
       try { return newGame(line.moves).history().join(' ') === signature; } catch { return false; }
     });
@@ -1734,6 +1729,21 @@ function App() {
     if (!history.length) { setNotice('Speel eerst minstens één zet voordat je een variant opslaat.'); return; }
     if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan.'); return; }
     if (!branchName.trim()) { setNotice('Geef de nieuwe variant eerst een naam.'); return; }
+
+    // Chessbook-style repertoire trees should not accumulate duplicate full move paths.
+    const movePath = movePathSignature(game);
+    const duplicate = repertoireLines.find(line => {
+      try { return signatureFromPgn(line.moves) === movePathSignature(game); }
+      catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setBranchName('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
+
     const branch: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
@@ -1807,6 +1817,20 @@ function App() {
       setNotice('De variant moet minstens één zet bevatten.');
       return;
     }
+    // Use the same exact-path rule for manual PGN entry and board-created variants.
+    const signature = movePathSignature(candidate);
+    const duplicate = repertoireLines.find(line => {
+      try { return signatureFromPgn(line.moves) === signature; } catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setShowAdd(false);
+      setNewName('');
+      setNewNote('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
     const line: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
@@ -1858,7 +1882,7 @@ function App() {
     const existingSignatures = new Set(lines
       .filter(line => line.repertoireId === activeRepertoire.id)
       .flatMap(line => {
-        try { return [newGame(line.moves).history().join(' ')]; } catch { return []; }
+        try { return [signatureFromPgn(line.moves)]; } catch { return []; }
       }));
     let duplicateCount = 0;
     for (let index = 0; index < chunks.length; index++) {
@@ -1866,7 +1890,7 @@ function App() {
       try {
         candidate.loadPgn(chunks[index]);
         if (!candidate.history().length) continue;
-        const signature = candidate.history().join(' ');
+        const signature = movePathSignature(candidate);
         if (existingSignatures.has(signature)) { duplicateCount++; continue; }
         existingSignatures.add(signature);
         const eventName = chunks[index].match(/\[Event\s+"([^"]+)"/)?.[1];
@@ -2962,6 +2986,34 @@ function App() {
                         <button className="primary" onClick={saveCurrentBranch}>{repertoireLines.length ? 'Variant opslaan' : 'Eerste variant opslaan'}</button>
                         <button className="secondary" disabled={!repertoireLines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
+                      {activeRepertoire && (
+                        <section className="coverage-summary" aria-label="Vervolgzetten uit repertoire">
+                          <strong>Vervolgzetten vanuit deze stelling</strong>
+                          <p className="muted">Kies een zet om de bestaande repertoiretak vanaf de huidige bordstelling te volgen. De zet wordt op het bord gespeeld; sla daarna op als nieuwe variant als je een nieuwe tak wilt bewaren.</p>
+                          {treePositionMoves.length ? (
+                            <div className="move-entry-actions">
+                              {treePositionMoves.map(move => (
+                                <button className="secondary" key={move.uci + '-' + move.san} title={'Gebruikt in: ' + move.lineNames.join(', ')} onClick={() => {
+                                  const candidate = cloneGame(game);
+                                  try {
+                                    candidate.move(move.san);
+                                    setGame(candidate);
+                                    setSelected(null);
+                                    setNotice('Repertoirezet ' + move.san + ' gespeeld. Opgeslagen in ' + move.lineNames.length + ' bestaande variant(en).');
+                                  } catch {
+                                    setNotice('Deze vervolgzet kon niet vanaf de huidige stelling worden gespeeld.');
+                                  }
+                                }}>
+                                  {move.san} <span className="muted">({move.lineIds.length})</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="muted">Geen bestaande vervolgzetten vanaf deze stelling. Speel een zet om een nieuwe vertakking te maken.</p>
+                          )}
+                          <div className="muted">Repertoire: {repertoireTree.positionCount} stellingen · {repertoireTree.branchingPositions} vertakkingspunten · {repertoireTree.transpositionPositions} transpositieposities</div>
+                        </section>
+                      )}
                       <details className="move-tree-details" open>
                         <summary>Gedeelde zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">

@@ -7,6 +7,7 @@ import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
+import { analyzeTranspositions } from '../src/study/transpositions.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
@@ -442,5 +443,47 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+// 13. Custom-FEN PGNs must branch from their declared starting position, not the standard root.
+const customStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const customFenPgn = '[Event "Custom start"]\n[SetUp "1"]\n[FEN "' + customStartFen + '"]\n\n1... c5 *';
+const customFenTree = buildRepertoireTree([
+  { id: 'custom-fen-line', name: 'Siciliaans vanaf FEN', moves: customFenPgn },
+]);
+equal(customFenTree.validLines, 1, 'PGN met custom FEN wordt als geldige variant verwerkt');
+equal(customFenTree.invalidLines, 0, 'PGN met custom FEN veroorzaakt geen replayfout');
+const customFenMoves = getRepertoireContinuations(customFenTree, customStartFen);
+check(customFenMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling toont de opgeslagen vervolgzet');
+check(!getRepertoireContinuations(customFenTree, new Chess().fen()).some(move => move.san === 'c5'), 'custom-FEN-variant vervuilt de standaard beginstelling niet');
+
+// 14. Identical board placement with different castling rights must not be merged as a transposition.
+const customFenNoCastling = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b - - 0 1';
+const castlingRightsTree = buildRepertoireTree([
+  { id: 'fen-castling', name: 'FEN met rokaderechten', moves: '[SetUp "1"]\n[FEN "' + customStartFen + '"]\n\n1... c5 *' },
+  { id: 'fen-no-castling', name: 'FEN zonder rokaderechten', moves: '[SetUp "1"]\n[FEN "' + customFenNoCastling + '"]\n\n1... e5 *' },
+]);
+const withCastlingMoves = getRepertoireContinuations(castlingRightsTree, customStartFen);
+const withoutCastlingMoves = getRepertoireContinuations(castlingRightsTree, customFenNoCastling);
+check(withCastlingMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling met rokaderechten behoudt eigen vervolgzetten');
+check(!withCastlingMoves.some(move => move.san === 'e5'), 'stelling met rokaderechten neemt geen zet uit andere FEN over');
+check(withoutCastlingMoves.some(move => move.san === 'e5'), 'custom-FEN-stelling zonder rokaderechten behoudt eigen vervolgzetten');
+check(!withoutCastlingMoves.some(move => move.san === 'c5'), 'stelling zonder rokaderechten neemt geen zet uit andere FEN over');
+
+
+// 15. Transposition analysis must replay custom-FEN games from their declared start.
+const afterE4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const fenTranspositions = analyzeTranspositions([
+  { id: 'standard-e4-e5', name: 'Standaard e4-e5', moves: '1. e4 e5' },
+  { id: 'custom-after-e4', name: 'Vanaf FEN na e4', moves: `[SetUp "1"]
+[FEN "${afterE4Fen}"]
+
+1... e5 *` },
+]);
+const customFenAfterE5 = new Chess(afterE4Fen);
+play(customFenAfterE5, 'e5', 'custom-FEN-transpositie');
+const sharedFenPosition = fenTranspositions.find(item => item.fen === positionKey(customFenAfterE5));
+check(sharedFenPosition, 'transpositie-analyse neemt de custom-FEN-voortzetting mee');
+equal(sharedFenPosition.paths, 2, 'standaard- en custom-FEN-route naar dezelfde stelling worden als twee paden herkend');
+check(sharedFenPosition.names.includes('Vanaf FEN na e4'), 'transpositie-analyse bewaart de naam van de custom-FEN-variant');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
