@@ -474,7 +474,10 @@ check(!withoutCastlingMoves.some(move => move.san === 'c5'), 'stelling zonder ro
 const afterE4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 const fenTranspositions = analyzeTranspositions([
   { id: 'standard-e4-e5', name: 'Standaard e4-e5', moves: '1. e4 e5' },
-  { id: 'custom-after-e4', name: 'Vanaf FEN na e4', moves: '[SetUp "1"]\\n[FEN "' + afterE4Fen + '"]\\n\\n1... e5 *' },
+  { id: 'custom-after-e4', name: 'Vanaf FEN na e4', moves: `[SetUp "1"]
+[FEN "${afterE4Fen}"]
+
+1... e5 *` },
 ]);
 const afterE5 = new Chess(afterE4Fen);
 play(afterE5, 'e5', 'custom-FEN-transpositie');
