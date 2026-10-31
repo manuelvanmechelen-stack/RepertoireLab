@@ -8,6 +8,7 @@ import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
+import { analyzeTranspositions } from './study/transpositions.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
 import { evaluationLossCp } from './study/engineAudit.mjs';
@@ -861,24 +862,6 @@ function cloneGame(source: Chess) {
   }
   copy.load(source.fen());
   return copy;
-}
-function positionSignature(game: Chess) { return game.fen().split(' ').slice(0, 4).join(' '); }
-function analyzeTranspositions(lines: Line[]) {
-  const positions = new Map<string, { histories: Set<string>; names: Set<string>; ply: number }>();
-  for (const line of lines) {
-    try {
-      const game = new Chess(); const history: string[] = [];
-      for (const move of newGame(line.moves).history({ verbose: true })) {
-        game.move(move.san); history.push(move.san);
-        const key = positionSignature(game);
-        const item = positions.get(key) ?? { histories: new Set<string>(), names: new Set<string>(), ply: history.length };
-        item.histories.add(history.join(' ')); item.names.add(line.name); item.ply = Math.min(item.ply, history.length); positions.set(key, item);
-      }
-    } catch { /* skip invalid legacy PGNs */ }
-  }
-  return [...positions.entries()].filter(([, item]) => item.histories.size > 1)
-    .map(([fen, item]) => ({ fen, paths: item.histories.size, names: [...item.names], ply: item.ply }))
-    .sort((a, b) => b.names.length - a.names.length || a.ply - b.ply).slice(0, 20);
 }
 function parseStrictPgn(pgn: string): Chess {
   const game = new Chess();
