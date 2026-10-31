@@ -479,9 +479,9 @@ const fenTranspositions = analyzeTranspositions([
 
 1... e5 *` },
 ]);
-const afterE5 = new Chess(afterE4Fen);
-play(afterE5, 'e5', 'custom-FEN-transpositie');
-const sharedFenPosition = fenTranspositions.find(item => item.fen === positionKey(afterE5));
+const customFenAfterE5 = new Chess(afterE4Fen);
+play(customFenAfterE5, 'e5', 'custom-FEN-transpositie');
+const sharedFenPosition = fenTranspositions.find(item => item.fen === positionKey(customFenAfterE5));
 check(sharedFenPosition, 'transpositie-analyse neemt de custom-FEN-voortzetting mee');
 equal(sharedFenPosition.paths, 2, 'standaard- en custom-FEN-route naar dezelfde stelling worden als twee paden herkend');
 check(sharedFenPosition.names.includes('Vanaf FEN na e4'), 'transpositie-analyse bewaart de naam van de custom-FEN-variant');
