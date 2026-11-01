@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
+import { loadFenPosition, movePathSignature, pathSignatureFromPgn } from './study/pathSignature.mjs';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, selectDueOwnPly, type LineGrade, type FsrsCardState } from './study/scheduling.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
@@ -1169,9 +1170,9 @@ function App() {
       const position = newGame(line.moves);
       position.move(san);
       const moves = position.pgn();
-      const signature = position.history().join(' ');
+      const signature = movePathSignature(position);
       const duplicate = repertoireLines.some(existing => {
-        try { return newGame(existing.moves).history().join(' ') === signature; } catch { return false; }
+        try { return pathSignatureFromPgn(existing.moves) === signature; } catch { return false; }
       });
       if (duplicate) {
         setNotice('Deze volledige zetvolgorde staat al in je repertoire.');
@@ -1207,7 +1208,7 @@ function App() {
     setCoverageAutofillLoading(true);
     const signatures = new Set<string>();
     for (const existing of repertoireLines) {
-      try { signatures.add(newGame(existing.moves).history().join(' ')); } catch { /* Ignore malformed legacy lines. */ }
+      try { signatures.add(pathSignatureFromPgn(existing.moves)); } catch { /* Ignore malformed legacy lines. */ }
     }
     const additions: Line[] = [];
     const nextCoverage: Record<string, { games: number; suggestions?: Array<ExplorerMove & { games: number }> }> = {};
@@ -1247,7 +1248,7 @@ function App() {
           try {
             const position = newGame(current.line.moves);
             position.move(suggestion.san);
-            const signature = position.history().join(' ');
+            const signature = movePathSignature(position);
             if (signatures.has(signature)) continue;
             signatures.add(signature);
             const addition: Line = {
@@ -1289,7 +1290,7 @@ function App() {
     }
     const signatures = new Set<string>();
     for (const existing of repertoireLines) {
-      try { signatures.add(newGame(existing.moves).history().join(' ')); } catch { /* Ignore malformed legacy lines. */ }
+      try { signatures.add(pathSignatureFromPgn(existing.moves)); } catch { /* Ignore malformed legacy lines. */ }
     }
     const additions: Line[] = [];
     const limit = 100;
@@ -1302,7 +1303,7 @@ function App() {
         try {
           const position = newGame(line.moves);
           position.move(suggestion.san);
-          const signature = position.history().join(' ');
+          const signature = movePathSignature(position);
           if (signatures.has(signature)) continue;
           signatures.add(signature);
           additions.push({
@@ -1689,9 +1690,9 @@ function App() {
       setNotice('Deze zet is niet legaal in de huidige stelling.');
       return;
     }
-    const signature = candidate.history().join(' ');
+    const signature = movePathSignature(candidate);
     const duplicate = repertoireLines.find(line => {
-      try { return newGame(line.moves).history().join(' ') === signature; } catch { return false; }
+      try { return pathSignatureFromPgn(line.moves) === signature; } catch { return false; }
     });
     if (duplicate) {
       setActive(duplicate.id);
@@ -1734,6 +1735,21 @@ function App() {
     if (!history.length) { setNotice('Speel eerst minstens één zet voordat je een variant opslaat.'); return; }
     if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan.'); return; }
     if (!branchName.trim()) { setNotice('Geef de nieuwe variant eerst een naam.'); return; }
+
+    // Chessbook-style repertoire trees should not accumulate duplicate full move paths.
+    const signature = movePathSignature(game);
+    const duplicate = repertoireLines.find(line => {
+      try { return pathSignatureFromPgn(line.moves) === signature; }
+      catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setBranchName('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
+
     const branch: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
@@ -1807,6 +1823,20 @@ function App() {
       setNotice('De variant moet minstens één zet bevatten.');
       return;
     }
+    // Use the same exact-path rule for manual PGN entry and board-created variants.
+    const signature = movePathSignature(candidate);
+    const duplicate = repertoireLines.find(line => {
+      try { return pathSignatureFromPgn(line.moves) === signature; } catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setShowAdd(false);
+      setNewName('');
+      setNewNote('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
     const line: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
@@ -1858,7 +1888,7 @@ function App() {
     const existingSignatures = new Set(lines
       .filter(line => line.repertoireId === activeRepertoire.id)
       .flatMap(line => {
-        try { return [newGame(line.moves).history().join(' ')]; } catch { return []; }
+        try { return [pathSignatureFromPgn(line.moves)]; } catch { return []; }
       }));
     let duplicateCount = 0;
     for (let index = 0; index < chunks.length; index++) {
@@ -1866,7 +1896,7 @@ function App() {
       try {
         candidate.loadPgn(chunks[index]);
         if (!candidate.history().length) continue;
-        const signature = candidate.history().join(' ');
+        const signature = movePathSignature(candidate);
         if (existingSignatures.has(signature)) { duplicateCount++; continue; }
         existingSignatures.add(signature);
         const eventName = chunks[index].match(/\[Event\s+"([^"]+)"/)?.[1];
@@ -2031,12 +2061,11 @@ function App() {
     setNotice(gradeLabel[grade] + ': deze variant komt ' + timing + ' terug.');
   }
   function loadFen() {
-    const candidate = new Chess();
     try {
-      candidate.load(fenInput.trim());
+      const candidate = loadFenPosition(fenInput.trim());
       setGame(candidate);
       setSelected(null);
-      setNotice('Stelling geladen.');
+      setNotice('Stelling geladen. De FEN-beginstelling blijft behouden wanneer je de variant opslaat.');
       setExplorer(null);
       setExplorerError('');
     } catch {
@@ -2962,6 +2991,34 @@ function App() {
                         <button className="primary" onClick={saveCurrentBranch}>{repertoireLines.length ? 'Variant opslaan' : 'Eerste variant opslaan'}</button>
                         <button className="secondary" disabled={!repertoireLines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
+                      {activeRepertoire && (
+                        <section className="coverage-summary" aria-label="Vervolgzetten uit repertoire">
+                          <strong>Vervolgzetten vanuit deze stelling</strong>
+                          <p className="muted">Kies een zet om de bestaande repertoiretak vanaf de huidige bordstelling te volgen. De zet wordt op het bord gespeeld; sla daarna op als nieuwe variant als je een nieuwe tak wilt bewaren.</p>
+                          {treePositionMoves.length ? (
+                            <div className="move-entry-actions">
+                              {treePositionMoves.map(move => (
+                                <button className="secondary" key={move.uci + '-' + move.san} title={'Gebruikt in: ' + move.lineNames.join(', ')} onClick={() => {
+                                  const candidate = cloneGame(game);
+                                  try {
+                                    candidate.move(move.san);
+                                    setGame(candidate);
+                                    setSelected(null);
+                                    setNotice('Repertoirezet ' + move.san + ' gespeeld. Opgeslagen in ' + move.lineNames.length + ' bestaande variant(en).');
+                                  } catch {
+                                    setNotice('Deze vervolgzet kon niet vanaf de huidige stelling worden gespeeld.');
+                                  }
+                                }}>
+                                  {move.san} <span className="muted">({move.lineIds.length})</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="muted">Geen bestaande vervolgzetten vanaf deze stelling. Speel een zet om een nieuwe vertakking te maken.</p>
+                          )}
+                          <div className="muted">Repertoire: {repertoireTree.positionCount} stellingen · {repertoireTree.branchingPositions} vertakkingspunten · {repertoireTree.transpositionPositions} transpositieposities</div>
+                        </section>
+                      )}
                       <details className="move-tree-details" open>
                         <summary>Gedeelde zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">
