@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 
-const normalizePositionFen = fen => String(fen ?? '').trim().split(/\\s+/).slice(0, 4).join(' ');
+const normalizePositionFen = fen => String(fen ?? '').trim().split(/\s+/).slice(0, 4).join(' ');
 
 /**
  * Load a user-supplied FEN and retain it as PGN setup metadata.
