@@ -7,6 +7,7 @@ import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
+import { loadFenPosition, movePathSignature, pathSignatureFromPgn } from '../src/study/pathSignature.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
@@ -442,5 +443,29 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+
+// 16. FEN-aware move-path identity must be stable across UI loading, PGN round-trips and move counters.
+const signatureStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const signatureWithCountersFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 7 15';
+const signatureNoCastlingFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b - - 0 1';
+const loadedFenGame = loadFenPosition(signatureStartFen);
+loadedFenGame.move('c5');
+check(loadedFenGame.pgn().includes('[SetUp "1"]') && loadedFenGame.pgn().includes('[FEN "' + signatureStartFen + '"]'), 'FEN laden bewaart de beginstelling in PGN-headers');
+equal(pathSignatureFromPgn(loadedFenGame.pgn()), movePathSignature(loadedFenGame), 'FEN-pad behoudt dezelfde identiteit na PGN-export en import');
+const counterVariant = loadFenPosition(signatureWithCountersFen);
+counterVariant.move('c5');
+equal(movePathSignature(counterVariant), movePathSignature(loadedFenGame), 'halfmove- en fullmove-tellers veroorzaken geen schijnbaar andere repertoiretak');
+const noCastlingVariant = loadFenPosition(signatureNoCastlingFen);
+noCastlingVariant.move('c5');
+check(movePathSignature(noCastlingVariant) !== movePathSignature(loadedFenGame), 'verschillende rokaderechten blijven verschillende beginstellingen');
+const standardRoute = new Chess();
+standardRoute.move('e4');
+standardRoute.move('c5');
+check(movePathSignature(standardRoute) !== movePathSignature(loadedFenGame), 'dezelfde laatste zet vanuit een andere beginstelling is geen duplicaat');
+const bareFenGame = new Chess(signatureStartFen);
+bareFenGame.move('c5');
+equal(movePathSignature(bareFenGame), movePathSignature(loadedFenGame), 'FEN-pad wordt ook herkend wanneer de Chess-instantie geen PGN-headers heeft');
+throws(() => pathSignatureFromPgn('1. e4 Qh9'), 'ongeldige PGN krijgt geen standaard-beginstelling als duplicaatsignatuur');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
