@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
+import { loadFenPosition, movePathSignature, pathSignatureFromPgn } from './study/pathSignature.mjs';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, selectDueOwnPly, type LineGrade, type FsrsCardState } from './study/scheduling.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
@@ -839,18 +840,6 @@ function newGame(moves?: string) {
   return game;
 }
 
-// Duplicate detection must include the starting position as well as the SAN path.
-// Identical SAN sequences from a custom FEN are not the same repertoire line.
-function movePathSignature(game: Chess) {
-  const headers = game.getHeaders();
-  const startFen = headers.FEN ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-  return startFen + '|' + game.history().join(' ');
-}
-
-function signatureFromPgn(pgn: string) {
-  return movePathSignature(newGame(pgn));
-}
-
 // Clone the complete move history, not just the current FEN. Loading only FEN
 // discards earlier moves and makes saved variants/undo contain only the last move.
 function cloneGame(source: Chess) {
@@ -1181,9 +1170,9 @@ function App() {
       const position = newGame(line.moves);
       position.move(san);
       const moves = position.pgn();
-      const signature = position.history().join(' ');
+      const signature = movePathSignature(position);
       const duplicate = repertoireLines.some(existing => {
-        try { return newGame(existing.moves).history().join(' ') === signature; } catch { return false; }
+        try { return pathSignatureFromPgn(existing.moves) === signature; } catch { return false; }
       });
       if (duplicate) {
         setNotice('Deze volledige zetvolgorde staat al in je repertoire.');
@@ -1219,7 +1208,7 @@ function App() {
     setCoverageAutofillLoading(true);
     const signatures = new Set<string>();
     for (const existing of repertoireLines) {
-      try { signatures.add(newGame(existing.moves).history().join(' ')); } catch { /* Ignore malformed legacy lines. */ }
+      try { signatures.add(pathSignatureFromPgn(existing.moves)); } catch { /* Ignore malformed legacy lines. */ }
     }
     const additions: Line[] = [];
     const nextCoverage: Record<string, { games: number; suggestions?: Array<ExplorerMove & { games: number }> }> = {};
@@ -1259,7 +1248,7 @@ function App() {
           try {
             const position = newGame(current.line.moves);
             position.move(suggestion.san);
-            const signature = position.history().join(' ');
+            const signature = movePathSignature(position);
             if (signatures.has(signature)) continue;
             signatures.add(signature);
             const addition: Line = {
@@ -1301,7 +1290,7 @@ function App() {
     }
     const signatures = new Set<string>();
     for (const existing of repertoireLines) {
-      try { signatures.add(newGame(existing.moves).history().join(' ')); } catch { /* Ignore malformed legacy lines. */ }
+      try { signatures.add(pathSignatureFromPgn(existing.moves)); } catch { /* Ignore malformed legacy lines. */ }
     }
     const additions: Line[] = [];
     const limit = 100;
@@ -1314,7 +1303,7 @@ function App() {
         try {
           const position = newGame(line.moves);
           position.move(suggestion.san);
-          const signature = position.history().join(' ');
+          const signature = movePathSignature(position);
           if (signatures.has(signature)) continue;
           signatures.add(signature);
           additions.push({
@@ -1703,7 +1692,7 @@ function App() {
     }
     const signature = movePathSignature(candidate);
     const duplicate = repertoireLines.find(line => {
-      try { return signatureFromPgn(line.moves) === signature; } catch { return false; }
+      try { return pathSignatureFromPgn(line.moves) === signature; } catch { return false; }
     });
     if (duplicate) {
       setActive(duplicate.id);
@@ -1750,7 +1739,7 @@ function App() {
     // Chessbook-style repertoire trees should not accumulate duplicate full move paths.
     const signature = movePathSignature(game);
     const duplicate = repertoireLines.find(line => {
-      try { return signatureFromPgn(line.moves) === signature; }
+      try { return pathSignatureFromPgn(line.moves) === signature; }
       catch { return false; }
     });
     if (duplicate) {
@@ -1837,7 +1826,7 @@ function App() {
     // Use the same exact-path rule for manual PGN entry and board-created variants.
     const signature = movePathSignature(candidate);
     const duplicate = repertoireLines.find(line => {
-      try { return signatureFromPgn(line.moves) === signature; } catch { return false; }
+      try { return pathSignatureFromPgn(line.moves) === signature; } catch { return false; }
     });
     if (duplicate) {
       setActive(duplicate.id);
@@ -1899,7 +1888,7 @@ function App() {
     const existingSignatures = new Set(lines
       .filter(line => line.repertoireId === activeRepertoire.id)
       .flatMap(line => {
-        try { return [signatureFromPgn(line.moves)]; } catch { return []; }
+        try { return [pathSignatureFromPgn(line.moves)]; } catch { return []; }
       }));
     let duplicateCount = 0;
     for (let index = 0; index < chunks.length; index++) {
@@ -2072,12 +2061,11 @@ function App() {
     setNotice(gradeLabel[grade] + ': deze variant komt ' + timing + ' terug.');
   }
   function loadFen() {
-    const candidate = new Chess();
     try {
-      candidate.load(fenInput.trim());
+      const candidate = loadFenPosition(fenInput.trim());
       setGame(candidate);
       setSelected(null);
-      setNotice('Stelling geladen.');
+      setNotice('Stelling geladen. De FEN-beginstelling blijft behouden wanneer je de variant opslaat.');
       setExplorer(null);
       setExplorerError('');
     } catch {
