@@ -152,7 +152,15 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
     setSession(null);
     setPassword('');
 
-    const revocation = await pendingRevocation;
+    let revocation = { ok: false, status: null };
+    try {
+      revocation = await pendingRevocation;
+    } catch {
+      // Local sign-out remains complete even if revocation cannot be attempted.
+    } finally {
+      setBusy(false);
+    }
+
     if (revocation.ok) {
       setMessage('Uitgelogd. Supabase heeft deze cloudsessie ingetrokken.');
     } else if (revocation.status && [401, 403, 404].includes(revocation.status)) {
@@ -160,7 +168,6 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
     } else {
       setMessage('Lokaal uitgelogd. De intrekking bij Supabase kon niet worden bevestigd; controleer je verbinding en beëindig de sessie zo nodig via Supabase Auth.');
     }
-    setBusy(false);
   }
 
   return <section className="repertoire-builder cloud-sync-panel">
