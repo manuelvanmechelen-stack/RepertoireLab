@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { validateCloudBackupPayload } from '../study/cloudBackup.mjs';
+import { revokeSupabaseSession } from '../study/supabaseAuth.mjs';
 
 type Backup = {
   app: string;
@@ -133,11 +134,33 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
     finally { setBusy(false); }
   }
 
-  function logout() {
+  async function logout() {
+    setBusy(true);
+    setMessage('');
+
+    // Start server-side revocation first, then clear this device immediately.
+    // A network failure must never leave the local session active.
+    const pendingRevocation = session
+      ? revokeSupabaseSession({
+          supabaseUrl: SUPABASE_URL,
+          apiKey: SUPABASE_KEY,
+          accessToken: session.access_token,
+        })
+      : Promise.resolve({ ok: false, status: null });
+
     try { sessionStorage.removeItem(SESSION_KEY); } catch { /* private browsing may block session storage */ }
     setSession(null);
     setPassword('');
-    setMessage('Uitgelogd op dit apparaat.');
+
+    const revocation = await pendingRevocation;
+    if (revocation.ok) {
+      setMessage('Uitgelogd. Supabase heeft deze cloudsessie ingetrokken.');
+    } else if (revocation.status && [401, 403, 404].includes(revocation.status)) {
+      setMessage('Uitgelogd. Supabase meldt dat deze sessie niet meer actief is.');
+    } else {
+      setMessage('Lokaal uitgelogd. De intrekking bij Supabase kon niet worden bevestigd; controleer je verbinding en beëindig de sessie zo nodig via Supabase Auth.');
+    }
+    setBusy(false);
   }
 
   return <section className="repertoire-builder cloud-sync-panel">
