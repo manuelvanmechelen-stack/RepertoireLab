@@ -152,7 +152,7 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
     setSession(null);
     setPassword('');
 
-    let revocation = { ok: false, status: null };
+    let revocation: { ok: boolean; status: number | null } = { ok: false, status: null };
     try {
       revocation = await pendingRevocation;
     } catch {
