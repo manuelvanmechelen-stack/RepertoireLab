@@ -5,6 +5,7 @@ import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 import { validateCloudBackupPayload } from '../src/study/cloudBackup.mjs';
+import { revokeSupabaseSession } from '../src/study/supabaseAuth.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
@@ -451,5 +452,52 @@ throws(() => validateCloudBackupPayload({ ...validCloudPayload, app: 'OtherApp' 
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [{ ...backup.lines[0], moves: '1. e4 Qh9' }] }), 'cloud weigert een ongeldige variant vóór upload');
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [backup.lines[0], { ...backup.lines[0], name: 'Dubbele variant' }] }), 'cloud weigert dubbele variant-ID’s vóór upload');
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, moveMemory: { 'line-1:0': { seen: -1, misses: 0, due: fixedNow, intervalDays: 0 } } }), 'cloud weigert ongeldige spaced-repetition-data vóór upload');
+
+
+// 14. Supabase sign-out revokes only the current refresh-token session.
+let logoutRequest;
+const successfulLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co/',
+  apiKey: 'sb_publishable_test',
+  accessToken: 'test-access-token',
+  fetchImpl: async (url, init) => {
+    logoutRequest = { url, init };
+    return { ok: true, status: 204 };
+  },
+});
+equal(successfulLogout.ok, true, 'succesvolle Supabase logout bevestigt server-side intrekking');
+equal(successfulLogout.status, 204, 'logout bewaart de HTTP-status voor de UI');
+equal(logoutRequest.url, 'https://project.supabase.co/auth/v1/logout?scope=local', 'logout trekt alleen de huidige sessie in');
+equal(logoutRequest.init.method, 'POST', 'logout gebruikt POST');
+equal(logoutRequest.init.headers.apikey, 'sb_publishable_test', 'logout gebruikt de publieke projectkey');
+equal(logoutRequest.init.headers.Authorization, 'Bearer test-access-token', 'logout autoriseert met het huidige access-token');
+
+const expiredLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co',
+  apiKey: 'sb_publishable_test',
+  accessToken: 'expired-token',
+  fetchImpl: async () => ({ ok: false, status: 401 }),
+});
+equal(expiredLogout.ok, false, 'een verlopen sessie wordt niet als nieuw ingetrokken gemeld');
+equal(expiredLogout.status, 401, 'een ongeldige sessie-status blijft beschikbaar voor de UI');
+
+const failedLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co',
+  apiKey: 'sb_publishable_test',
+  accessToken: 'test-access-token',
+  fetchImpl: async () => { throw new Error('offline'); },
+});
+equal(failedLogout.ok, false, 'netwerkfout blokkeert lokale uitlogafhandeling niet');
+equal(failedLogout.status, null, 'netwerkfout wordt zonder gevoelige details teruggegeven');
+
+let missingConfigFetchCalled = false;
+const missingConfigLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co',
+  apiKey: '',
+  accessToken: 'test-access-token',
+  fetchImpl: async () => { missingConfigFetchCalled = true; return { ok: true, status: 204 }; },
+});
+equal(missingConfigLogout.ok, false, 'ontbrekende Supabase-configuratie meldt geen intrekking');
+equal(missingConfigFetchCalled, false, 'ontbrekende configuratie start geen netwerkverzoek');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
