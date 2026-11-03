@@ -1,6 +1,29 @@
 export const DAY_MS = 86_400_000;
 export const MINUTE_MS = 60_000;
 
+/**
+ * Validate the JSON-safe Card shape produced by ts-fsrs 5.x.
+ * Invalid persisted cards are never passed into the scheduler.
+ */
+export function isValidFsrsCardState(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const validTimestamp = timestamp => Number.isFinite(timestamp) && timestamp >= 0 &&
+    Number.isFinite(new Date(timestamp).getTime());
+  const validState = Number.isInteger(value.state)
+    ? value.state >= 0 && value.state <= 3
+    : ['New', 'Learning', 'Review', 'Relearning'].includes(value.state);
+  return validTimestamp(value.due) &&
+    (value.last_review === undefined || value.last_review === null || validTimestamp(value.last_review)) &&
+    Number.isFinite(value.stability) && value.stability >= 0 &&
+    Number.isFinite(value.difficulty) && value.difficulty >= 0 &&
+    Number.isFinite(value.elapsed_days) && value.elapsed_days >= 0 &&
+    Number.isFinite(value.scheduled_days) && value.scheduled_days >= 0 &&
+    Number.isInteger(value.learning_steps) && value.learning_steps >= 0 &&
+    Number.isInteger(value.reps) && value.reps >= 0 &&
+    Number.isInteger(value.lapses) && value.lapses >= 0 &&
+    validState;
+}
+
 export function scheduleMoveResult(previous, remembered, now = Date.now()) {
   const seen = (previous?.seen ?? 0) + 1;
   const misses = previous?.misses ?? 0;
@@ -84,8 +107,12 @@ const fsrsRating = { again: Rating.Again, hard: Rating.Hard, good: Rating.Good, 
 
 function restoreFsrsCard(previous, now) {
   const saved = previous?.fsrsCard;
-  if (saved && typeof saved === 'object' && Number.isFinite(saved.due)) {
-    return { ...saved, due: new Date(saved.due), last_review: Number.isFinite(saved.last_review) ? new Date(saved.last_review) : null };
+  if (isValidFsrsCardState(saved)) {
+    return {
+      ...saved,
+      due: new Date(saved.due),
+      last_review: Number.isFinite(saved.last_review) ? new Date(saved.last_review) : undefined,
+    };
   }
   return createEmptyCard(new Date(now));
 }
