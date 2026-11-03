@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
-import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
+import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isValidFsrsCardState, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
@@ -320,6 +320,19 @@ const extraFsrsLineGood = scheduleFsrsLineGrade(extraFsrsLineAgain, 'good', fixe
 equal(extraFsrsLineGood.seen, 2, 'FSRS herstelt kaartstatus bij een volgende beoordeling');
 check(extraFsrsLineGood.fsrsCard.last_review === fixedNow + 60_000, 'FSRS bewaart het tijdstip van de laatste beoordeling');
 throws(() => scheduleFsrsLineGrade(undefined, 'unknown', fixedNow), 'FSRS weigert onbekende beoordelingen');
+check(isValidFsrsCardState(extraFsrsFirst.fsrsCard), 'FSRS valideert een volledige kaart uit de scheduler');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, state: 9 }), 'FSRS weigert een onbekende kaartstatus');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, reps: -1 }), 'FSRS weigert een negatieve herhalingsteller');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, learning_steps: 1.5 }), 'FSRS weigert een niet-geheel leerstapnummer');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, elapsed_days: -1 }), 'FSRS weigert negatieve verstreken dagen');
+const malformedFsrsRecovery = scheduleFsrsMoveResult({
+  seen: 3,
+  misses: 1,
+  fsrsCard: { ...extraFsrsFirst.fsrsCard, state: 9 },
+}, true, fixedNow + 2000);
+const freshFsrsRecovery = scheduleFsrsMoveResult(undefined, true, fixedNow + 2000);
+equal(malformedFsrsRecovery.fsrsCard.due, freshFsrsRecovery.fsrsCard.due, 'beschadigde FSRS-kaart wordt veilig als nieuwe kaart ingepland');
+equal(malformedFsrsRecovery.seen, 4, 'herstel van een beschadigde FSRS-kaart behoudt de pogingenteller');
 
 const qualityCheckLine = [{ id: 'qualityCheck', name: 'Testlijn', color: 'Wit', moves: '1. e4 e5 2. Nf3 Nc6', note: 'Plan' }];
 const qualityCheck = calculateRepertoireQuality(qualityCheckLine, {
@@ -358,6 +371,24 @@ equal(splitPgnCollection('[Event "Eén"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *
 // 11. Exercise the exact backup validator used by the restore UI.
 const checkedBackup = validateBackup(backup);
 equal(checkedBackup.lines.length, 1, 'validator accepteert geldige variant');
+const backupWithFsrsCard = validateBackup({
+  ...backup,
+  lines: [{ ...backup.lines[0], fsrsCard: extraFsrsFirst.fsrsCard }],
+});
+check(isValidFsrsCardState(backupWithFsrsCard.lines[0].fsrsCard), 'back-up bewaart een volledige geldige FSRS-kaart');
+throws(() => validateBackup({
+  ...backup,
+  lines: [{ ...backup.lines[0], fsrsCard: { ...extraFsrsFirst.fsrsCard, state: 9 } }],
+}), 'back-up weigert een ongeldige FSRS-kaart op een variant');
+throws(() => validateBackup({
+  ...backup,
+  moveMemory: {
+    'line-1:0': {
+      seen: 1, misses: 0, due: fixedNow, intervalDays: 1,
+      fsrsCard: { ...extraFsrsFirst.fsrsCard, reps: -1 },
+    },
+  },
+}), 'back-up weigert een ongeldige FSRS-kaart op een individuele zet');
 equal(checkedBackup.repertoires.length, 1, 'validator accepteert geldig repertoire');
 equal(checkedBackup.activeRepertoireId, 'rep-1', 'validator bewaart geldig actieve repertoire');
 equal(checkedBackup.moveMemory['line-1:0'].misses, 1, 'validator bewaart herhalingsgegevens');
