@@ -51,7 +51,7 @@ export function summarizeCoverageMoves(moves, knownSans = [], minGames = 20) {
 export function collectKnownContinuationSans(lines, targetFen) {
   if (!Array.isArray(lines) || typeof targetFen !== 'string' || !targetFen.trim()) return [];
 
-  const positionKey = fen => fen.trim().split(/\\s+/).slice(0, 4).join(' ');
+  const positionKey = fen => fen.trim().split(/\s+/).slice(0, 4).join(' ');
   const targetKey = positionKey(targetFen);
   const known = new Set();
 
