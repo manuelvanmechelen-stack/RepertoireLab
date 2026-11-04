@@ -27,8 +27,11 @@ export function buildRepertoireTree(lines = []) {
       if (!history.length) { invalidLines++; continue; }
       validLines++;
       totalPlies += history.length;
-      const cursor = new Chess();
-      nodes.get(rootKey).lineIds.add(line.id);
+      // PGNs may begin from a composed or study position. Replay from the
+      // declared FEN instead of incorrectly applying those moves to the
+      // standard initial position.
+      const startFen = game.getHeaders().FEN;
+      const cursor = startFen ? new Chess(startFen) : new Chess();
       for (const move of history) {
         const beforeKey = positionKey(cursor);
         const before = nodes.get(beforeKey) ?? {

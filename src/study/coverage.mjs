@@ -1,3 +1,5 @@
+import { Chess } from 'chess.js';
+
 /**
  * Rank master-database continuations for actionable repertoire coverage.
  * A move's sample is the sum of wins, draws and losses; no result-based bias
@@ -37,4 +39,39 @@ export function summarizeCoverageMoves(moves, knownSans = [], minGames = 20) {
     observedMoves: ranked.length,
     coveredMoves: ranked.filter(move => known.has(move.normalizedSan)).length,
   };
+}
+
+
+/**
+ * Collect repertoire replies already stored after a position.
+ *
+ * Replay each PGN from its declared FEN start when present. Starting every
+ * line from the standard position silently omits valid custom-FEN replies.
+ */
+export function collectKnownContinuationSans(lines, targetFen) {
+  if (!Array.isArray(lines) || typeof targetFen !== 'string' || !targetFen.trim()) return [];
+
+  const positionKey = fen => fen.trim().split(/\s+/).slice(0, 4).join(' ');
+  const targetKey = positionKey(targetFen);
+  const known = new Set();
+
+  for (const line of lines) {
+    if (!line || typeof line.moves !== 'string' || !line.moves.trim()) continue;
+    try {
+      const game = new Chess();
+      game.loadPgn(line.moves);
+      // chess.js stores the exact pre-move FEN on each verbose history move.
+      // Use it directly so custom-FEN starts and transposed paths share the
+      // same position identity without replaying from the standard start.
+      for (const move of game.history({ verbose: true })) {
+        if (positionKey(move.before) === targetKey) {
+          known.add(move.san.replace(/[!?+#]+/g, ''));
+        }
+      }
+    } catch {
+      // Ignore invalid or legacy lines; one damaged line must not hide others.
+    }
+  }
+
+  return [...known];
 }
