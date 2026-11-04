@@ -76,7 +76,7 @@ equal(coverageSummary.missingMoves[0].san, 'c5', 'meest relevante ontbrekende ze
 equal(summarizeCoverageMoves([], []).weightedCoverage, null, 'geen databasegegevens geven geen misleidend percentage');
 
 const coverageCustomStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
-const coverageCustomFenPgn = '[Event "Custom FEN coverage"]\\n[SetUp "1"]\\n[FEN "' + coverageCustomStartFen + '"]\\n\\n1... c5 2. Nf3 d6 *';
+const coverageCustomFenPgn = '[Event "Custom FEN coverage"]\n[SetUp "1"]\n[FEN "' + coverageCustomStartFen + '"]\n\n1... c5 2. Nf3 d6 *';
 const coverageCustomPosition = new Chess(coverageCustomStartFen);
 play(coverageCustomPosition, 'c5', 'custom-FEN coverage position');
 const customFenKnownReplies = collectKnownContinuationSans(
