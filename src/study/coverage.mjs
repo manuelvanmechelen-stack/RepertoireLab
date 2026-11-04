@@ -60,17 +60,13 @@ export function collectKnownContinuationSans(lines, targetFen) {
     try {
       const game = new Chess();
       game.loadPgn(line.moves);
-      const headers = game.getHeaders();
-      const startFen = typeof headers.FEN === 'string' && headers.FEN.trim()
-        ? headers.FEN
-        : undefined;
-      const cursor = startFen ? new Chess(startFen) : new Chess();
-
+      // chess.js stores the exact pre-move FEN on each verbose history move.
+      // Use it directly so custom-FEN starts and transposed paths share the
+      // same position identity without replaying from the standard start.
       for (const move of game.history({ verbose: true })) {
-        if (positionKey(cursor.fen()) === targetKey) {
+        if (positionKey(move.before) === targetKey) {
           known.add(move.san.replace(/[!?+#]+/g, ''));
         }
-        cursor.move(move);
       }
     } catch {
       // Ignore invalid or legacy lines; one damaged line must not hide others.
