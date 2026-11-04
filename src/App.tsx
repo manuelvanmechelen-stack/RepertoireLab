@@ -5,7 +5,7 @@ import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, sele
 import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
-import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
+import { collectKnownContinuationSans, rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { analyzeTranspositions } from './study/transpositions.mjs';
@@ -2805,20 +2805,9 @@ function App() {
                       let coverageDetails: ReturnType<typeof summarizeCoverageMoves> | null = null;
                       if (!result.error && result.suggestions?.length) {
                         try {
-                          const targetKey = newGame(line.moves).fen().split(' ').slice(0, 4).join(' ');
-                          const knownNextMoves = new Set<string>();
-                          for (const candidateLine of repertoireLines) {
-                            try {
-                              const replay = newGame(candidateLine.moves);
-                              const history = replay.history({ verbose: true });
-                              const cursor = new Chess();
-                              for (const move of history) {
-                                if (cursor.fen().split(' ').slice(0, 4).join(' ') === targetKey) knownNextMoves.add(move.san.replace(/[!?+#]+/g, ''));
-                                cursor.move(move);
-                              }
-                            } catch { /* Ignore malformed legacy lines. */ }
-                          }
-                          coverageDetails = summarizeCoverageMoves(result.suggestions, [...knownNextMoves], 20);
+                          const targetFen = newGame(line.moves).fen();
+                          const knownNextMoves = collectKnownContinuationSans(repertoireLines, targetFen);
+                          coverageDetails = summarizeCoverageMoves(result.suggestions, knownNextMoves, 20);
                         } catch { /* Keep frequency/depth results if a legacy line cannot be replayed. */ }
                       }
                       return (
