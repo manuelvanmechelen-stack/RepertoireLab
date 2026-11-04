@@ -4,7 +4,7 @@ import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrs
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
-import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
+import { collectKnownContinuationSans, rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { analyzeTranspositions } from '../src/study/transpositions.mjs';
@@ -74,6 +74,39 @@ equal(coverageSummary.weightedCoverage, 50, 'dekking wordt gewogen naar partijfr
 equal(coverageSummary.missingMoves.length, 1, 'ontbrekende vervolgen worden op bruikbare steekproef gefilterd');
 equal(coverageSummary.missingMoves[0].san, 'c5', 'meest relevante ontbrekende zet blijft beschikbaar');
 equal(summarizeCoverageMoves([], []).weightedCoverage, null, 'geen databasegegevens geven geen misleidend percentage');
+
+const coverageCustomStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const coverageCustomFenPgn = '[Event "Custom FEN coverage"]\\n[SetUp "1"]\\n[FEN "' + coverageCustomStartFen + '"]\\n\\n1... c5 2. Nf3 d6 *';
+const coverageCustomPosition = new Chess(coverageCustomStartFen);
+play(coverageCustomPosition, 'c5', 'custom-FEN coverage position');
+const customFenKnownReplies = collectKnownContinuationSans(
+  [{ id: 'custom-fen', moves: coverageCustomFenPgn }],
+  coverageCustomPosition.fen(),
+);
+check(customFenKnownReplies.includes('Nf3'), 'coverage herkent een bestaande vervolgzet vanuit de FEN-header van een variant');
+equal(
+  collectKnownContinuationSans([{ id: 'custom-fen', moves: coverageCustomFenPgn }], new Chess().fen()).length,
+  0,
+  'een custom-FEN-variant wordt niet ten onrechte vanaf de standaard beginstelling afgespeeld',
+);
+const noCastlingCoverageFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b - - 0 1';
+const noCastlingCoveragePosition = new Chess(noCastlingCoverageFen);
+play(noCastlingCoveragePosition, 'c5', 'custom-FEN coverage zonder rokaderechten');
+equal(
+  collectKnownContinuationSans([{ id: 'custom-fen', moves: coverageCustomFenPgn }], noCastlingCoveragePosition.fen()).length,
+  0,
+  'coverage verwart custom-FEN-posities met verschillende rokaderechten niet',
+);
+const standardCoveragePgn = '1. e4 c5 2. Nf3 d6';
+const standardCoveragePosition = new Chess();
+play(standardCoveragePosition, 'e4', 'standard coverage e4');
+play(standardCoveragePosition, 'c5', 'standard coverage c5');
+const transposedKnownReplies = collectKnownContinuationSans([
+  { id: 'standard-route', moves: standardCoveragePgn },
+  { id: 'custom-route', moves: coverageCustomFenPgn },
+], standardCoveragePosition.fen());
+check(transposedKnownReplies.includes('Nf3'), 'coverage behoudt vervolgzetten uit standaard PGN-routes');
+
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
