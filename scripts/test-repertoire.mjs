@@ -450,9 +450,6 @@ equal(transpositionReview.transpositionCount, 3, 'review registreert de halve ze
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
-console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
-
-
 // 10b. PGN collection boundaries must ignore result-like text in comments and variations.
 const braceCommentCollection = [
   '[Event "First game"]',
@@ -521,3 +518,5 @@ const escapeLineCollection = [
   '1. d4 d5 *',
 ].join('\n');
 equal(splitPgnCollection(escapeLineCollection).length, 2, 'PGN-escape-regels creëren geen extra partij');
+
+console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
