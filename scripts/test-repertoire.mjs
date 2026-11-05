@@ -451,3 +451,73 @@ check(transpositionReview.summary.includes('transpositie herkend'), 'review beno
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
+
+
+// 10b. PGN collection boundaries must ignore result-like text in comments and variations.
+const braceCommentCollection = [
+  '[Event "First game"]',
+  '',
+  '1. e4 {comment starts here',
+  '[Event "not a game header"]',
+  'the previous score was 1-0',
+  '} e5 *',
+  '[Event "Second game"]',
+  '',
+  '1. d4 d5 *',
+].join('\n');
+const braceCommentChunks = splitPgnCollection(braceCommentCollection);
+equal(braceCommentChunks.length, 2, 'Event-achtige tekst in een meerregelige brace-comment splitst geen partij');
+check(braceCommentChunks[0].includes('[Event "not a game header"]'), 'commentinhoud blijft bij de eerste partij');
+check(braceCommentChunks[1].includes('[Event "Second game"]'), 'echte Event-header na de uitslag start de tweede partij');
+
+const semicolonFalseResult = [
+  '[Result "1-0"]',
+  '[White "A"]',
+  '[Black "B"]',
+  '1. e4 ; historical result 1-0',
+  '[Site "Club"]',
+  '[White "C"]',
+  '[Black "D"]',
+  '1. d4 d5 *',
+].join('\n');
+equal(splitPgnCollection(semicolonFalseResult).length, 1, 'resultaattekst in een puntkomma-comment beëindigt de partij niet');
+
+const variationFalseResult = [
+  '[Result "1-0"]',
+  '[White "A"]',
+  '[Black "B"]',
+  '1. e4 (1. d4 1-0) e5',
+  '[Site "Club"]',
+  '[White "C"]',
+  '[Black "D"]',
+  '1. d4 d5 *',
+].join('\n');
+equal(splitPgnCollection(variationFalseResult).length, 1, 'resultaatmarker binnen een RAV beëindigt de hoofdpartij niet');
+
+const variationHeaderCollection = [
+  '[Event "First game"]',
+  '',
+  '1. e4 (1. d4',
+  '[Event "inside variation"]',
+  '1-0) e5 *',
+  '[Event "Second game"]',
+  '',
+  '1. d4 d5 *',
+].join('\n');
+const variationHeaderChunks = splitPgnCollection(variationHeaderCollection);
+equal(variationHeaderChunks.length, 2, 'Event-header binnen een meerregelige RAV splitst geen partij');
+check(variationHeaderChunks[0].includes('[Event "inside variation"]'), 'RAV-headerachtige tekst blijft in de eerste partij');
+
+const crlfCollection = '[Event "First"]\r\n\r\n1. e4 e5 1-0\r\n[Result "0-1"]\r\n[White "Second"]\r\n\r\n1. d4 d5 0-1';
+equal(splitPgnCollection(crlfCollection).length, 2, 'PGN-verzamelingen met Windows-regelafbrekingen blijven correct gesplitst');
+
+const escapeLineCollection = [
+  '[Event "First"]',
+  '% [Event "ignored escape line"]',
+  '',
+  '1. e4 e5 *',
+  '[Event "Second"]',
+  '',
+  '1. d4 d5 *',
+].join('\n');
+equal(splitPgnCollection(escapeLineCollection).length, 2, 'PGN-escape-regels creëren geen extra partij');
