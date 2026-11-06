@@ -519,4 +519,18 @@ const escapeLineCollection = [
 ].join('\n');
 equal(splitPgnCollection(escapeLineCollection).length, 2, 'PGN-escape-regels creëren geen extra partij');
 
+
+const nonNestedBraceCommentCollection = [
+  '[Event "First game"]',
+  '',
+  '1. e4 {a literal { brace and a historical result 1-0',
+  '} e5 *',
+  '[Event "Second game"]',
+  '',
+  '1. d4 d5 *',
+].join('\\n');
+const nonNestedBraceCommentChunks = splitPgnCollection(nonNestedBraceCommentCollection);
+equal(nonNestedBraceCommentChunks.length, 2, 'een accolade binnen een brace-comment start geen geneste comment en blokkeert de volgende partij niet');
+check(nonNestedBraceCommentChunks[0].includes('} e5 *'), 'de eerste sluitaccolade beëindigt de brace-comment en laat de uitslag detecteren');
+
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
