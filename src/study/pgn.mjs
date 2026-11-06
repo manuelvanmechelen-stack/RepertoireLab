@@ -1,6 +1,6 @@
-const TAG_PAIR = /^\\s*\\[([A-Za-z0-9_]+)\\s+"(?:[^"\\\\]|\\\\.)*"\\s*\\]\\s*$/;
+const TAG_PAIR = /^\s*\[([A-Za-z0-9_]+)\s+"(?:[^"\\]|\\.)*"\s*\]\s*$/;
 const RESULT_MARKERS = ["1/2-1/2", "1-0", "0-1", "*"];
-const isDelimiter = char => !char || /\\s/.test(char) || "(){};[]".includes(char);
+const isDelimiter = char => !char || /\s/.test(char) || "(){};[]".includes(char);
 
 function inspectMovetextLine(line, state) {
   let hasMovetext = false;
@@ -35,7 +35,7 @@ function inspectMovetextLine(line, state) {
       hasMovetext = true;
       continue;
     }
-    if (/\\s/.test(char)) continue;
+    if (/\s/.test(char)) continue;
 
     hasMovetext = true;
     if (state.variationDepth > 0 || hasResult) continue;
@@ -70,7 +70,7 @@ export function splitPgnCollection(input) {
   let sawMovetext = false;
   const state = { inBraceComment: false, variationDepth: 0 };
 
-  for (const line of trimmed.split(/\\r?\\n/)) {
+  for (const line of trimmed.split(/\r?\n/)) {
     const tag = !state.inBraceComment && state.variationDepth === 0 && !line.startsWith("%")
       ? TAG_PAIR.exec(line)
       : null;
@@ -80,7 +80,7 @@ export function splitPgnCollection(input) {
     );
 
     if (startsNextGame) {
-      chunks.push(current.join("\\n").trim());
+      chunks.push(current.join("\n").trim());
       current = [];
       completed = false;
       sawMovetext = false;
@@ -96,6 +96,6 @@ export function splitPgnCollection(input) {
     completed ||= scanned.hasResult;
   }
 
-  if (current.some(line => line.trim())) chunks.push(current.join("\\n").trim());
+  if (current.some(line => line.trim())) chunks.push(current.join("\n").trim());
   return chunks.filter(Boolean);
 }
