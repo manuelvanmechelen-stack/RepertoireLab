@@ -528,7 +528,7 @@ const nonNestedBraceCommentCollection = [
   '[Event "Second game"]',
   '',
   '1. d4 d5 *',
-].join('\\n');
+].join('\n');
 const nonNestedBraceCommentChunks = splitPgnCollection(nonNestedBraceCommentCollection);
 equal(nonNestedBraceCommentChunks.length, 2, 'een accolade binnen een brace-comment start geen geneste comment en blokkeert de volgende partij niet');
 check(nonNestedBraceCommentChunks[0].includes('} e5 *'), 'de eerste sluitaccolade beëindigt de brace-comment en laat de uitslag detecteren');
