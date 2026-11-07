@@ -526,16 +526,16 @@ const convergingCustomLines = [
   {
     id: 'custom-rights-root',
     name: 'Custom start with castling rights',
-    moves: `[SetUp "1"]\n[FEN "${rightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 *`,
+    moves: `[SetUp "1"]\n[FEN "${rightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 3. Ra2 *`,
   },
   {
     id: 'custom-no-rights-root',
     name: 'Custom start without castling rights',
-    moves: `[SetUp "1"]\n[FEN "${noRightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 *`,
+    moves: `[SetUp "1"]\n[FEN "${noRightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 3. Ra2 *`,
   },
 ];
 const convergedPosition = new Chess(rightsRootFen);
-for (const san of ['Kd2', 'Kd7', 'Ke1', 'Ke8']) play(convergedPosition, san, 'custom-FEN convergence ' + san);
+for (const san of ['Kd2', 'Kd7', 'Ke1', 'Ke8', 'Ra2']) play(convergedPosition, san, 'custom-FEN convergence ' + san);
 const convergingTree = buildRepertoireTree(convergingCustomLines);
 const convergedNode = convergingTree.nodes.find(node => node.key === positionKey(convergedPosition));
 check(convergedNode, 'custom-FEN routes create their converged position node');
