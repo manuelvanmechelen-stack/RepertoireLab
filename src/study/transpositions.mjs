@@ -18,6 +18,7 @@ export function analyzeTranspositions(lines = []) {
       const moves = source.history({ verbose: true });
       const startFen = source.getHeaders().FEN;
       const cursor = startFen ? new Chess(startFen) : new Chess();
+      const startKey = positionKey(cursor);
       const path = [];
 
       for (const move of moves) {
@@ -29,7 +30,7 @@ export function analyzeTranspositions(lines = []) {
           names: new Set(),
           ply: path.length,
         };
-        item.histories.add(path.join(' '));
+        item.histories.add(`${startKey}|${path.join(' ')}`);
         item.names.add(line.name || 'Naamloze variant');
         item.ply = Math.min(item.ply, path.length);
         positions.set(key, item);
