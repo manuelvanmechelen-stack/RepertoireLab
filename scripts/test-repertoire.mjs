@@ -519,4 +519,30 @@ check(sharedFenPosition, 'transpositie-analyse neemt de custom-FEN-voortzetting 
 equal(sharedFenPosition.paths, 2, 'standaard- en custom-FEN-route naar dezelfde stelling worden als twee paden herkend');
 check(sharedFenPosition.names.includes('Vanaf FEN na e4'), 'transpositie-analyse bewaart de naam van de custom-FEN-variant');
 
+// 16. Different custom-FEN roots that converge after king moves remain distinct paths.
+const rightsRootFen = 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1';
+const noRightsRootFen = 'r3k2r/8/8/8/8/8/8/R3K2R w - - 0 1';
+const convergingCustomLines = [
+  {
+    id: 'custom-rights-root',
+    name: 'Custom start with castling rights',
+    moves: `[SetUp "1"]\n[FEN "${rightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 *`,
+  },
+  {
+    id: 'custom-no-rights-root',
+    name: 'Custom start without castling rights',
+    moves: `[SetUp "1"]\n[FEN "${noRightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 *`,
+  },
+];
+const convergedPosition = new Chess(rightsRootFen);
+for (const san of ['Kd2', 'Kd7', 'Ke1', 'Ke8']) play(convergedPosition, san, 'custom-FEN convergence ' + san);
+const convergingTree = buildRepertoireTree(convergingCustomLines);
+const convergedNode = convergingTree.nodes.find(node => node.key === positionKey(convergedPosition));
+check(convergedNode, 'custom-FEN routes create their converged position node');
+equal(convergedNode.pathCount, 2, 'tree counts distinct custom-FEN roots even when their SAN paths match');
+const convergedSummary = analyzeTranspositions(convergingCustomLines)
+  .find(item => item.fen === positionKey(convergedPosition));
+check(convergedSummary, 'transposition analysis includes the converged custom-FEN position');
+equal(convergedSummary.paths, 2, 'transposition analysis distinguishes different FEN roots with identical SAN paths');
+
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
