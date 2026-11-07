@@ -13,7 +13,7 @@ export function buildRepertoireTree(lines = []) {
   const rootKey = positionKey(start);
   nodes.set(rootKey, {
     key: rootKey, fen: start.fen(), ply: 0,
-    incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(['']),
+    incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set([`${rootKey}|`]),
   });
   let validLines = 0;
   let invalidLines = 0;
@@ -32,13 +32,14 @@ export function buildRepertoireTree(lines = []) {
       // standard initial position.
       const startFen = game.getHeaders().FEN;
       const cursor = startFen ? new Chess(startFen) : new Chess();
+      const startKey = positionKey(cursor);
       for (const move of history) {
         const beforeKey = positionKey(cursor);
         const before = nodes.get(beforeKey) ?? {
           key: beforeKey, fen: cursor.fen(), ply: cursor.history().length,
           incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
-        before.pathSignatures.add(cursor.history().join(' '));
+        before.pathSignatures.add(`${startKey}|${cursor.history().join(' ')}`);
         nodes.set(beforeKey, before);
         const played = cursor.move(move);
         const afterKey = positionKey(cursor);
@@ -46,7 +47,7 @@ export function buildRepertoireTree(lines = []) {
           key: afterKey, fen: cursor.fen(), ply: cursor.history().length,
           incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
-        after.pathSignatures.add(cursor.history().join(' '));
+        after.pathSignatures.add(`${startKey}|${cursor.history().join(' ')}`);
         nodes.set(afterKey, after);
         const existing = before.moves.get(played.san) ?? {
           san: played.san, uci: played.from + played.to + (played.promotion ?? ''),
