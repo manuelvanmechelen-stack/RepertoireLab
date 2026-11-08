@@ -28,10 +28,12 @@ export function isDue(due, now = Date.now()) {
   return !Number.isFinite(due) || due <= 0 || due <= now;
 }
 
-export function selectDueOwnPly(historyLength, color, moveMemory, lineId, lineDue, now = Date.now()) {
+export function selectDueOwnPly(historyLength, color, moveMemory, lineId, lineDue, now = Date.now(), startingColor = 'w') {
   if (isDue(lineDue, now)) return 0;
+  const firstPlyIsWhite = startingColor !== 'b';
   for (let ply = 0; ply < historyLength; ply++) {
-    const isOwnMove = color === 'Wit' ? ply % 2 === 0 : ply % 2 === 1;
+    const isWhiteMove = (ply % 2 === 0) === firstPlyIsWhite;
+    const isOwnMove = color === 'Wit' ? isWhiteMove : !isWhiteMove;
     if (isOwnMove && isDue(moveMemory?.[lineId + ':' + ply]?.due, now)) return ply;
   }
   return 0;

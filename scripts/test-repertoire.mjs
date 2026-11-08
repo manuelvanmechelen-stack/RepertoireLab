@@ -296,6 +296,8 @@ check(isDue(fixedNow - 1, fixedNow), 'verlopen datum is verschuldigd');
 check(!isDue(fixedNow + 1, fixedNow), 'toekomstige datum is niet verschuldigd');
 equal(selectDueOwnPly(6, 'Wit', { 'x:0': { due: fixedNow + 100 }, 'x:2': { due: fixedNow - 1 } }, 'x', fixedNow + 50, fixedNow), 2, 'wit herhaalt eerste eigen zet die verschuldigd is');
 equal(selectDueOwnPly(6, 'Zwart', { 'x:1': { due: fixedNow - 1 } }, 'x', fixedNow + 50, fixedNow), 1, 'zwart herhaalt eerste eigen zet die verschuldigd is');
+equal(selectDueOwnPly(4, 'Zwart', { 'custom:0': { due: fixedNow + 100 }, 'custom:1': { due: fixedNow - 1 }, 'custom:2': { due: fixedNow - 1 } }, 'custom', fixedNow + 50, fixedNow, 'b'), 2, 'zwart met een zwarte beginbeurt herhaalt een eigen zet en slaat wits zet over');
+equal(selectDueOwnPly(4, 'Wit', { 'custom:0': { due: fixedNow - 1 }, 'custom:1': { due: fixedNow + 100 }, 'custom:3': { due: fixedNow - 1 } }, 'custom', fixedNow + 50, fixedNow, 'b'), 3, 'wit met een zwarte beginbeurt herhaalt de eerstvolgende eigen zet');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow - 1, fixedNow), 0, 'verlopen hele variant start vanaf begin');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen vervallen zet valt terug op beginstelling');
 

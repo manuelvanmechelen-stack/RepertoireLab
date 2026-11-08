@@ -39,4 +39,85 @@ test.describe('RepertoireLab kernflows', () => {
     await expect(page.getByLabel('Naam nieuw repertoire')).toBeVisible();
     await expect(page.getByRole('button', { name: /Volledige back-up exporteren/ })).toBeVisible();
   });
+
+  test('antwoord blijft verborgen tot alle eigen zetten op het bord zijn gespeeld', async ({ page }) => {
+    const repertoire = { id: 'rep-1', name: 'Schots — wit', color: 'Wit', createdAt: Date.now() };
+    const line = {
+      id: 'line-1',
+      repertoireId: 'rep-1',
+      name: 'Schotse basislijn',
+      moves: '1. e4 e5 2. Nf3 Nc6 *',
+      color: 'Wit',
+      tags: [],
+      note: 'Ontwikkel snel en controleer het centrum.',
+      due: 0,
+      seen: 0,
+      intervalDays: 0,
+    };
+    await page.evaluate(({ repertoire, line }) => {
+      localStorage.setItem('repertoirelab-repertoires-v1', JSON.stringify([repertoire]));
+      localStorage.setItem('repertoirelab-active-repertoire-v1', repertoire.id);
+      localStorage.setItem('repertoirelab-lines-v1', JSON.stringify([line]));
+    }, { repertoire, line });
+    await page.reload();
+    await page.getByRole('button', { name: /Zettraining/ }).first().click();
+
+    const revealButton = page.locator('button.reveal-btn');
+    await expect(revealButton).toBeDisabled();
+    await expect(page.locator('.answer-box')).toHaveCount(0);
+
+    // A legal but incorrect move must not unlock the answer.
+    await page.getByRole('button', { name: 'e2', exact: true }).click();
+    await page.getByRole('button', { name: 'e3', exact: true }).click();
+    await expect(revealButton).toBeDisabled();
+    await expect(page.locator('.answer-box')).toHaveCount(0);
+
+    // Play White's repertoire moves; Black's replies are played automatically.
+    await page.getByRole('button', { name: 'e2', exact: true }).click();
+    await page.getByRole('button', { name: 'e4', exact: true }).click();
+    await expect(revealButton).toBeDisabled();
+    await page.getByRole('button', { name: 'g1', exact: true }).click();
+    await page.getByRole('button', { name: 'f3', exact: true }).click();
+
+    await expect(revealButton).toBeEnabled();
+    await expect(page.locator('.answer-box')).toBeVisible();
+    await revealButton.click();
+    await expect(page.locator('.answer-box')).toHaveCount(0);
+    await revealButton.click();
+    await expect(page.locator('.answer-box')).toBeVisible();
+
+    // Restarting a completed line must lock the answer again.
+    await page.getByRole('button', { name: 'Herstart training' }).click();
+    await expect(revealButton).toBeDisabled();
+    await expect(page.locator('.answer-box')).toHaveCount(0);
+  });
+
+  test('bordtraining start vanuit custom FEN en volgt zwart als beginbeurt', async ({ page }) => {
+    const repertoire = { id: 'rep-fen', name: 'Zwart — custom FEN', color: 'Zwart', createdAt: Date.now() };
+    const line = {
+      id: 'line-fen-black',
+      repertoireId: 'rep-fen',
+      name: 'Custom FEN met zwart aan zet',
+      moves: '[Event "Custom FEN training"]\n[SetUp "1"]\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1"]\n\n1... e5 2. Nf3 *',
+      color: 'Zwart',
+      tags: [],
+      note: 'Begin vanuit de opgeslagen custom-FEN-stelling.',
+      due: 0,
+      seen: 0,
+      intervalDays: 0,
+    };
+    await page.evaluate(({ repertoire, line }) => {
+      localStorage.setItem('repertoirelab-repertoires-v1', JSON.stringify([repertoire]));
+      localStorage.setItem('repertoirelab-active-repertoire-v1', repertoire.id);
+      localStorage.setItem('repertoirelab-lines-v1', JSON.stringify([line]));
+    }, { repertoire, line });
+    await page.reload();
+    await page.getByRole('button', { name: /Zettraining/ }).first().click();
+
+    await expect(page.getByText(/Zet 1 · Zwart aan zet/)).toBeVisible();
+    await page.getByRole('button', { name: 'e7', exact: true }).click();
+    await page.getByRole('button', { name: 'e5', exact: true }).click();
+    await expect(page.locator('.answer-box')).toBeVisible();
+    await expect(page.locator('button.reveal-btn')).toBeEnabled();
+  });
 });
