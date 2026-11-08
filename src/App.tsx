@@ -1961,16 +1961,26 @@ function App() {
       setTrainingFeedback('Niet goed. Probeer opnieuw; denk aan de ontwikkelingszet en de dreiging in deze stelling.');
     }
   }
-  function isOwnTrainingPly(ply: number, color: 'Wit' | 'Zwart') { return color === 'Wit' ? ply % 2 === 0 : ply % 2 === 1; }
+  function isOwnTrainingPly(ply: number, color: 'Wit' | 'Zwart', history: Array<{ color: string }>) {
+    return history[ply]?.color === (color === 'Wit' ? 'w' : 'b');
+  }
   function prepareBoardTraining(line: Line | null = review) {
     if (!line) return;
     setRevealed(false);
     try {
-      const san = newGame(line.moves).history(); const replay = new Chess(); let ply = 0;
+      const parsed = newGame(line.moves);
+      const history = parsed.history({ verbose: true });
+      const san = history.map(move => move.san);
+      // The first verbose move records the exact position before the game began.
+      // This preserves custom-FEN setups and their side-to-move during board practice.
+      const initialFen = history[0]?.before ?? parsed.header().FEN ?? new Chess().fen();
+      const replay = new Chess(initialFen);
+      const startingColor = history[0]?.color ?? (initialFen.split(' ')[1] === 'b' ? 'b' : 'w');
+      let ply = 0;
       // Start at the earliest due move when the whole line is not yet due.
-      const startAt = selectDueOwnPly(san.length, line.color, moveMemory, line.id, line.due, Date.now());
+      const startAt = selectDueOwnPly(san.length, line.color, moveMemory, line.id, line.due, Date.now(), startingColor);
       while (ply < startAt) { replay.move(san[ply]); ply++; }
-      while (ply < san.length && !isOwnTrainingPly(ply, line.color)) { replay.move(san[ply]); ply++; }
+      while (ply < san.length && !isOwnTrainingPly(ply, line.color, history)) { replay.move(san[ply]); ply++; }
       setTrainingPly(ply); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingInput(''); setTrainingEval(null); setTrainingEvalError('');
       setTrainingFeedback(ply >= san.length ? 'Geen eigen zetten meer in deze variant.' : (startAt > 0 ? 'Herhaling vanaf een individuele zet die aan de beurt is.' : 'Speel je volgende repertoirezet op het bord.'));
       setTrainingComplete(ply >= san.length);
@@ -1988,7 +1998,8 @@ function App() {
     const currentBoard = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); const piece = currentBoard.get(square);
     if (!trainingSelected) { if (piece && piece.color === currentBoard.turn()) setTrainingSelected(square); return; }
     try {
-      const expected = newGame(review.moves).history();
+      const history = newGame(review.moves).history({ verbose: true });
+      const expected = history.map(move => move.san);
       const expectedSan = expected[trainingPly] ?? '';
       // Match underpromotions when the repertoire explicitly calls for one.
       const promotion = expectedSan.match(/=([QRBN])/i)?.[1].toLowerCase() ?? 'q';
@@ -2002,7 +2013,7 @@ function App() {
       }
       setMoveMemory(prev => ({ ...prev, [key]: scheduleFsrsMoveResult(prev[key], true) }));
       let next = trainingPly + 1; const replay = new Chess(currentBoard.fen());
-      while (next < expected.length && !isOwnTrainingPly(next, review.color)) { replay.move(expected[next]); next++; }
+      while (next < expected.length && !isOwnTrainingPly(next, review.color, history)) { replay.move(expected[next]); next++; }
       setTrainingPly(next); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingFeedback(next >= expected.length ? 'Variant voltooid. Beoordeel nu hoe goed je de variant kende.' : 'Correct: ' + played.san + '. ' + (next > trainingPly + 1 ? 'Tegenzet automatisch afgespeeld. ' : '') + 'Speel de volgende repertoirezet.');
       if (next >= expected.length) { setTrainingComplete(true); setRevealed(true); }
     } catch { setTrainingSelected(null); }
