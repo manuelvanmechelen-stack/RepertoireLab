@@ -1,3 +1,5 @@
+import { Chess } from 'chess.js';
+
 const hasResult = text => /(?:^|\s)(?:1-0|0-1|1\/2-1\/2|\*)(?:\s|$)/m.test(text);
 
 /**
