@@ -28,3 +28,26 @@ export function splitPgnCollection(input) {
   if (current.some(line => line.trim())) chunks.push(current.join('\n').trim());
   return chunks.filter(Boolean);
 }
+
+
+/**
+ * Serialize a SAN path from its actual starting FEN. Non-standard starting
+ * positions are stored in PGN headers so imports, training and tree building
+ * can reconstruct the same position (including side to move and castling).
+ */
+export function serializePgnPath(startFen, sans) {
+  const game = new Chess(startFen);
+  const standardFen = new Chess().fen();
+  if (startFen !== standardFen) {
+    game.header('SetUp', '1');
+    game.header('FEN', startFen);
+  }
+  for (let index = 0; index < sans.length; index++) {
+    try {
+      game.move(sans[index]);
+    } catch {
+      throw new Error(`Ongeldige zet op positie ${index + 1}: ${sans[index]}`);
+    }
+  }
+  return game.pgn();
+}
