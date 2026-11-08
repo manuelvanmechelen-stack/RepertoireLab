@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, selectDueOwnPly, type LineGrade, type FsrsCardState } from './study/scheduling.mjs';
-import { splitPgnCollection } from './study/pgn.mjs';
+import { splitPgnCollection, serializePgnPath } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
@@ -1413,6 +1413,11 @@ function App() {
     try {
       const root = new Chess(game.fen());
       const prefix = game.history();
+      // Rewind a copy to recover the true starting position, including a manually
+      // loaded/custom FEN that may not be present in PGN headers.
+      const startingPosition = new Chess(game.fen());
+      while (startingPosition.undo()) { /* rewind to the PGN/FEN root */ }
+      const startingFen = startingPosition.fen();
       const source = explorerSource === 'masters' ? 'masters' : 'lichess';
       const fetchMoves = async (position: Chess): Promise<ExplorerMove[]> => {
         const url = new URL('https://explorer.lichess.org/' + source);
@@ -1433,7 +1438,12 @@ function App() {
       const minGames = 12;
       const additions: Line[] = [];
       const known = new Set(repertoireLines.map(line => {
-        try { return newGame(line.moves).history().join(' '); } catch { return ''; }
+        try {
+          const parsed = newGame(line.moves);
+          const history = parsed.history({ verbose: true });
+          const initialFen = history[0]?.before ?? parsed.header().FEN ?? new Chess().fen();
+          return initialFen.split(' ').slice(0, 4).join(' ') + '|' + parsed.history().join(' ');
+        } catch { return ''; }
       }));
       const walk = async (position: Chess, path: string[], depth: number): Promise<void> => {
         if (depth >= maxDepth || additions.length >= maxBranches) return;
@@ -1456,18 +1466,18 @@ function App() {
           // Save each meaningful branch as a PGN line, so the existing repertoire tree
           // can merge shared prefixes and show all generated continuations.
           const fullPath = [...prefix, ...nextPath];
-          const signature = fullPath.join(' ');
+          const signature = startingFen.split(' ').slice(0, 4).join(' ') + '|' + fullPath.join(' ');
           if (fullPath.length > prefix.length && !known.has(signature)) {
-            const saved = new Chess();
+            let savedPgn: string;
             try {
-              for (const san of fullPath) saved.move(san);
+              savedPgn = serializePgnPath(startingFen, fullPath);
             } catch { continue; }
             additions.push({
               id: crypto.randomUUID(),
               repertoireId: activeRepertoireId,
               name: (current?.name ?? 'Variant') + ' — ' + nextPath.join(' '),
               color: current?.color ?? (prefix.length % 2 === 0 ? 'Wit' : 'Zwart'),
-              moves: saved.pgn(),
+              moves: savedPgn,
               tags: [...(current?.tags ?? []), 'BookBuilder-stijl automatisch opgebouwd'],
               note: 'Automatisch voorgestelde vertakking op basis van Lichess-partijdata. Rangschikking houdt rekening met resultaat, steekproefgrootte en populariteit. Controleer de volledige variant en engine-evaluatie voordat je deze leert.',
               due: 0,
