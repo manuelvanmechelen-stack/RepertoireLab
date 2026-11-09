@@ -122,5 +122,25 @@
       "Inspect the game-by-game repertoire match report"
     ],
     "expected": "New branches are saved without duplicating existing lines, and the game review displays a match or deviation summary for available public games."
+  },
+  {
+    "name": "Keep the board workspace focused while browsing the repertoire tree",
+    "viewport": "desktop",
+    "covers": [
+      "collapsed shared move tree by default",
+      "expand and collapse shared move tree",
+      "sticky study board while browsing repertoire lines",
+      "mobile study panel remains in normal page flow"
+    ],
+    "description": "Verifies the move tree no longer dominates the initial workspace and that the study board stays available on desktop without trapping the mobile layout.",
+    "steps": [
+      "Open Mijn repertoire and select a saved variant",
+      "Verify the Gedeelde zettenboom section starts collapsed",
+      "Expand Gedeelde zettenboom and click a move to load that position",
+      "Collapse the move tree again",
+      "Scroll the repertoire list and verify the study board remains visible on desktop",
+      "Open the same workspace at a mobile viewport and verify the study panel can be reached by normal scrolling"
+    ],
+    "expected": "The move tree is collapsed on first load and can be expanded and collapsed without losing repertoire state. On desktop the study panel remains sticky within the viewport; on mobile it returns to normal document flow without horizontal overflow."
   }
 ]

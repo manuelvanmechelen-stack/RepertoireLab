@@ -2962,7 +2962,7 @@ function App() {
                         <button className="primary" onClick={saveCurrentBranch}>{repertoireLines.length ? 'Variant opslaan' : 'Eerste variant opslaan'}</button>
                         <button className="secondary" disabled={!repertoireLines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
-                      <details className="move-tree-details" open>
+                      <details className="move-tree-details">
                         <summary>Gedeelde zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">
                           {(() => {
