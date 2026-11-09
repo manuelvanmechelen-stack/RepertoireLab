@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
-import { splitPgnCollection } from '../src/study/pgn.mjs';
+import { splitPgnCollection, serializePgnPath } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
@@ -19,6 +19,22 @@ function gameFromPgn(pgn) { const game = new Chess(); game.loadPgn(pgn); return 
 function play(game, san, label = san) { const result = game.move(san); check(result, 'Zet moet legaal zijn: ' + label); return result; }
 function positionKey(game) { return game.fen().split(' ').slice(0, 4).join(' '); }
 function normalizeSan(san) { return san.replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O'); }
+
+// 0a. Autofill PGN serialization preserves custom starting FENs.
+const customStartFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1';
+const customStartPgn = serializePgnPath(customStartFen, ['e5', 'Nf3']);
+check(customStartPgn.includes('[SetUp "1"]'), 'custom-FEN-autofill bewaart de PGN SetUp-header');
+check(customStartPgn.includes('[FEN "' + customStartFen + '"]'), 'custom-FEN-autofill bewaart de exacte beginstelling');
+const customRoundTrip = new Chess();
+customRoundTrip.loadPgn(customStartPgn);
+equal(customRoundTrip.history().join(' '), 'e5 Nf3', 'custom-FEN-autofill bewaart de zetvolgorde');
+const expectedCustomEnd = new Chess(customStartFen);
+expectedCustomEnd.move('e5');
+expectedCustomEnd.move('Nf3');
+equal(customRoundTrip.fen(), expectedCustomEnd.fen(), 'custom-FEN-autofill herstelt dezelfde eindstelling');
+const standardStartPgn = serializePgnPath(new Chess().fen(), ['e4', 'e5']);
+check(!standardStartPgn.includes('[SetUp "1"]'), 'standaard-startstelling krijgt geen overbodige FEN-header');
+throws(() => serializePgnPath(customStartFen, ['e4']), 'illegale zet vanuit custom FEN wordt geweigerd');
 
 // 0b. Adaptive training priority inspired by Tabia's MIT-licensed due-line picker.
 const priorityNow = 1_800_000_000_000;
