@@ -28,7 +28,10 @@ check(customStartPgn.includes('[FEN "' + customStartFen + '"]'), 'custom-FEN-aut
 const customRoundTrip = new Chess();
 customRoundTrip.loadPgn(customStartPgn);
 equal(customRoundTrip.history().join(' '), 'e5 Nf3', 'custom-FEN-autofill bewaart de zetvolgorde');
-equal(customRoundTrip.fen(), new Chess(customStartFen).move('e5').move('Nf3').fen(), 'custom-FEN-autofill herstelt dezelfde eindstelling');
+const expectedCustomEnd = new Chess(customStartFen);
+expectedCustomEnd.move('e5');
+expectedCustomEnd.move('Nf3');
+equal(customRoundTrip.fen(), expectedCustomEnd.fen(), 'custom-FEN-autofill herstelt dezelfde eindstelling');
 const standardStartPgn = serializePgnPath(new Chess().fen(), ['e4', 'e5']);
 check(!standardStartPgn.includes('[SetUp "1"]'), 'standaard-startstelling krijgt geen overbodige FEN-header');
 throws(() => serializePgnPath(customStartFen, ['e4']), 'illegale zet vanuit custom FEN wordt geweigerd');
