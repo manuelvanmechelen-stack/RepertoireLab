@@ -1077,7 +1077,8 @@ function App() {
   const treePositionMoves = getRepertoireContinuations(repertoireTree, game.fen());
   const dueMoveLineIds = useMemo(() => getDueMoveLineIds(lines, moveMemory, Date.now()), [lines, moveMemory]);
   const trainingHealth = useMemo(() => {
-    const memoriesByLine = new Map(lines.map(line => [line.id, getLineMoveMemoryEntries(moveMemory, line.id)]));
+    const memoriesByLine = new Map<string, Array<[string, (typeof moveMemory)[string]]>>();
+    for (const line of lines) memoriesByLine.set(line.id, getLineMoveMemoryEntries(moveMemory, line.id));
     const ownMoves = [...memoriesByLine.values()].flat();
     const moveAttempts = ownMoves.reduce((sum, [, item]) => sum + item.seen, 0);
     const moveMisses = ownMoves.reduce((sum, [, item]) => sum + item.misses, 0);
