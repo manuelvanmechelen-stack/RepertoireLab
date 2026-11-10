@@ -1,4 +1,32 @@
-const DAY_MS = 86_400_000;
+/**
+ * Return only memory records whose final key segment is a canonical ply index
+ * and whose preceding segment is exactly the requested line ID.
+ * This prevents IDs such as "line" from absorbing "line:child:0".
+ */
+export function getLineMoveMemoryEntries(moveMemory = {}, lineId) {
+  if (typeof lineId !== 'string' || !lineId ||
+      !moveMemory || typeof moveMemory !== 'object' || Array.isArray(moveMemory)) return [];
+  const prefix = lineId + ':';
+  return Object.entries(moveMemory).filter(([key]) => {
+    if (!key.startsWith(prefix)) return false;
+    const plyText = key.slice(prefix.length);
+    if (!/^(0|[1-9]\d*)$/.test(plyText)) return false;
+    return Number.isSafeInteger(Number(plyText));
+  });
+}
+
+/** Return line IDs with at least one due, valid individual-move memory record. */
+export function getDueMoveLineIds(lines = [], moveMemory = {}, now = Date.now()) {
+  const dueIds = new Set();
+  for (const line of lines) {
+    if (!line || typeof line.id !== 'string' || !line.id) continue;
+    if (getLineMoveMemoryEntries(moveMemory, line.id).some(([, item]) =>
+      Number.isFinite(item?.due) && item.due <= now)) {
+      dueIds.add(line.id);
+    }
+  }
+  return dueIds;
+}
 
 /**
  * Prioritize the lines a player should rehearse next.
@@ -8,9 +36,7 @@ const DAY_MS = 86_400_000;
  */
 export function rankTrainingLines(lines = [], moveMemory = {}, missedMoves = {}, now = Date.now()) {
   const scored = lines.map((line, index) => {
-    const memories = Object.entries(moveMemory)
-      .filter(([key]) => key.startsWith(line.id + ':'))
-      .map(([, value]) => value);
+    const memories = getLineMoveMemoryEntries(moveMemory, line.id).map(([, value]) => value);
     const attempts = memories.reduce((sum, item) => sum + Math.max(0, Number(item?.seen) || 0), 0);
     const misses = memories.reduce((sum, item) => sum + Math.max(0, Number(item?.misses) || 0), 0)
       + Math.max(0, Number(missedMoves[line.id]) || 0);

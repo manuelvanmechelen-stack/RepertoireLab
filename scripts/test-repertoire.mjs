@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
@@ -7,7 +8,7 @@ import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
-import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
+import { getDueMoveLineIds, getLineMoveMemoryEntries, rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
 
@@ -36,6 +37,33 @@ equal(priorityOrder[0], 'weak-due', 'zwakste vervallen variant komt eerst');
 equal(priorityOrder[1], 'same-interval-old', 'bij gelijk interval komt de meest vervallen variant eerst');
 equal(priorityOrder[priorityOrder.length - 1], 'future', 'toekomstige variant komt na vervallen varianten');
 equal(rankTrainingLines(priorityLines, {}, {}, priorityNow).length, priorityLines.length, 'prioritering verliest geen varianten');
+
+const overlappingLineMemory = {
+  'line:0': { seen: 2, misses: 0, due: priorityNow + 86_400_000, intervalDays: 5 },
+  'line:child:0': { seen: 10, misses: 8, due: priorityNow - 86_400_000, intervalDays: 0 },
+  'line:child:1': { seen: 2, misses: 0, due: priorityNow + 86_400_000, intervalDays: 5 },
+  'line:invalid': { seen: 50, misses: 50, due: priorityNow - 86_400_000, intervalDays: 0 },
+};
+equal(getLineMoveMemoryEntries(overlappingLineMemory, 'line').length, 1, 'een lijn-ID neemt geen geheugen over van een lijn met een langere ID-prefix');
+equal(getLineMoveMemoryEntries(overlappingLineMemory, 'line')[0][0], 'line:0', 'alleen een canonieke ply-sleutel van de exacte lijn wordt gekoppeld');
+equal(getLineMoveMemoryEntries(overlappingLineMemory, 'line:child').length, 2, 'lijn-ID’s met dubbele punten behouden hun eigen ply-geheugen');
+const overlappingDueIds = getDueMoveLineIds([
+  { id: 'line', due: priorityNow + 86_400_000, intervalDays: 5 },
+  { id: 'line:child', due: priorityNow + 86_400_000, intervalDays: 5 },
+], overlappingLineMemory, priorityNow);
+check(!overlappingDueIds.has('line'), 'een due-zet van een child-variant maakt de parent-variant niet onterecht due');
+check(overlappingDueIds.has('line:child'), 'een due-zet markeert de juiste variant als due');
+const overlappingPriority = rankTrainingLines([
+  { id: 'line', due: priorityNow + 86_400_000, intervalDays: 5 },
+  { id: 'line:child', due: priorityNow + 86_400_000, intervalDays: 5 },
+], overlappingLineMemory, {}, priorityNow);
+equal(overlappingPriority[0].id, 'line:child', 'move-level fouten en due-status worden alleen aan de juiste variant toegerekend');
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const dueIdsDeclaration = appSource.indexOf('const dueMoveLineIds = useMemo');
+const trainingHealthDeclaration = appSource.indexOf('const trainingHealth = useMemo');
+check(dueIdsDeclaration >= 0 && trainingHealthDeclaration >= 0 && dueIdsDeclaration < trainingHealthDeclaration,
+  'due-move IDs zijn geïnitialiseerd voordat de training health memo wordt berekend');
+
 
 // 0c. Offline ECO/opening recognition: exact matches, prefix matches, and unknown inputs.
 const scotchOpening = identifyOpening('1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4');
