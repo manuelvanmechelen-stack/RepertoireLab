@@ -39,23 +39,23 @@ equal(priorityOrder[priorityOrder.length - 1], 'future', 'toekomstige variant ko
 equal(rankTrainingLines(priorityLines, {}, {}, priorityNow).length, priorityLines.length, 'prioritering verliest geen varianten');
 
 const overlappingLineMemory = {
-  'line:0': { seen: 2, misses: 0, due: priorityNow + DAY_MS, intervalDays: 5 },
-  'line:child:0': { seen: 10, misses: 8, due: priorityNow - DAY_MS, intervalDays: 0 },
-  'line:child:1': { seen: 2, misses: 0, due: priorityNow + DAY_MS, intervalDays: 5 },
-  'line:invalid': { seen: 50, misses: 50, due: priorityNow - DAY_MS, intervalDays: 0 },
+  'line:0': { seen: 2, misses: 0, due: priorityNow + 86_400_000, intervalDays: 5 },
+  'line:child:0': { seen: 10, misses: 8, due: priorityNow - 86_400_000, intervalDays: 0 },
+  'line:child:1': { seen: 2, misses: 0, due: priorityNow + 86_400_000, intervalDays: 5 },
+  'line:invalid': { seen: 50, misses: 50, due: priorityNow - 86_400_000, intervalDays: 0 },
 };
 equal(getLineMoveMemoryEntries(overlappingLineMemory, 'line').length, 1, 'een lijn-ID neemt geen geheugen over van een lijn met een langere ID-prefix');
 equal(getLineMoveMemoryEntries(overlappingLineMemory, 'line')[0][0], 'line:0', 'alleen een canonieke ply-sleutel van de exacte lijn wordt gekoppeld');
 equal(getLineMoveMemoryEntries(overlappingLineMemory, 'line:child').length, 2, 'lijn-ID’s met dubbele punten behouden hun eigen ply-geheugen');
 const overlappingDueIds = getDueMoveLineIds([
-  { id: 'line', due: priorityNow + DAY_MS, intervalDays: 5 },
-  { id: 'line:child', due: priorityNow + DAY_MS, intervalDays: 5 },
+  { id: 'line', due: priorityNow + 86_400_000, intervalDays: 5 },
+  { id: 'line:child', due: priorityNow + 86_400_000, intervalDays: 5 },
 ], overlappingLineMemory, priorityNow);
 check(!overlappingDueIds.has('line'), 'een due-zet van een child-variant maakt de parent-variant niet onterecht due');
 check(overlappingDueIds.has('line:child'), 'een due-zet markeert de juiste variant als due');
 const overlappingPriority = rankTrainingLines([
-  { id: 'line', due: priorityNow + DAY_MS, intervalDays: 5 },
-  { id: 'line:child', due: priorityNow + DAY_MS, intervalDays: 5 },
+  { id: 'line', due: priorityNow + 86_400_000, intervalDays: 5 },
+  { id: 'line:child', due: priorityNow + 86_400_000, intervalDays: 5 },
 ], overlappingLineMemory, {}, priorityNow);
 equal(overlappingPriority[0].id, 'line:child', 'move-level fouten en due-status worden alleen aan de juiste variant toegerekend');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
