@@ -1,5 +1,3 @@
-const DAY_MS = 86_400_000;
-
 /**
  * Return only memory records whose final key segment is a canonical ply index
  * and whose preceding segment is exactly the requested line ID.
@@ -12,7 +10,7 @@ export function getLineMoveMemoryEntries(moveMemory = {}, lineId) {
   return Object.entries(moveMemory).filter(([key]) => {
     if (!key.startsWith(prefix)) return false;
     const plyText = key.slice(prefix.length);
-    if (!/^(0|[1-9]\\d*)$/.test(plyText)) return false;
+    if (!/^(0|[1-9]\d*)$/.test(plyText)) return false;
     return Number.isSafeInteger(Number(plyText));
   });
 }
