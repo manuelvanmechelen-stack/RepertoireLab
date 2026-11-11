@@ -10,7 +10,7 @@ import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
-import { evaluationLossCp } from './study/engineAudit.mjs';
+import { evaluationLossCp, getEngineAuditPositions } from './study/engineAudit.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
   BarChart3,
@@ -2248,49 +2248,47 @@ function App() {
     setEngineLineAuditLoading(true);
     setEngineLineAuditError('');
     try {
-      const replay = new Chess();
-      replay.loadPgn(current.moves);
-      const moves = replay.history({ verbose: true });
+      const positions = getEngineAuditPositions(current.moves, current.color, 40);
       const findings: EngineLineAudit['findings'] = [];
-      let analyzedOwnMoves = 0;
-      for (let index = 0; index < moves.length; index++) {
-        const move = moves[index];
-        const isOwnMove = current.color === 'Wit' ? move.color === 'w' : move.color === 'b';
-        if (isOwnMove && analyzedOwnMoves < 40) {
-          const analysis = await runLocalStockfish(replay.fen(), engineAuditDepth);
-          const actualUci = move.from + move.to + (move.promotion ?? '');
-          const bestPv = analysis.pvs[0];
-          const playedPv = analysis.pvs.find(pv => pv.moves.trim().split(/\s+/)[0] === actualUci);
-          const bestUci = bestPv?.moves.trim().split(/\s+/)[0] ?? '';
-          const sanForUci = (uci: string) => {
-            const match = uci.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
-            if (!match) return uci || 'onbekend';
-            try {
-              const copy = new Chess(replay.fen());
-              return copy.move({ from: match[1].toLowerCase() as Square, to: match[2].toLowerCase() as Square, promotion: (match[3]?.toLowerCase() ?? 'q') as 'q' | 'r' | 'b' | 'n' }).san;
-            } catch { return uci; }
-          };
-          const cpScore = (pv: { cp?: number; mate?: number }) => pv.mate !== undefined ? (pv.mate > 0 ? 10000 : -10000) : (pv.cp ?? 0);
-          let lossCp: number | null = null;
-          let status: string;
-          if (bestUci === actualUci) {
-            lossCp = 0;
-            status = 'Beste enginekeuze in deze analyse';
-          } else if (!playedPv) {
-            status = 'Niet in top 5 — exact evaluatieverlies onbekend';
-          } else {
-            const calculatedLoss = evaluationLossCp(cpScore(bestPv ?? {}), cpScore(playedPv), move.color);
-            if (calculatedLoss === null) {
-              status = 'Evaluatieverschil niet beschikbaar';
-            } else {
-              lossCp = calculatedLoss;
-              status = lossCp >= 200 ? 'Grote evaluatieafwijking — controleer tactiek' : lossCp >= 80 ? 'Mogelijk onnauwkeurig — nader bekijken' : 'Kleine evaluatieafwijking';
-            }
-          }
-          findings.push({ ply: index + 1, san: move.san, bestMove: sanForUci(bestUci), lossCp, status });
-          analyzedOwnMoves++;
+      for (const position of positions) {
+        const analysis = await runLocalStockfish(position.fen, engineAuditDepth);
+        if (!analysis.pvs?.length) {
+          findings.push({
+            ply: position.ply, san: position.san, bestMove: 'onbekend',
+            lossCp: null, status: 'Geen enginevarianten ontvangen',
+          });
+          continue;
         }
-        replay.move(move);
+        const actualUci = position.uci;
+        const bestPv = analysis.pvs[0];
+        const playedPv = analysis.pvs.find(pv => pv.moves.trim().split(/\\s+/)[0] === actualUci);
+        const bestUci = bestPv?.moves.trim().split(/\\s+/)[0] ?? '';
+        const sanForUci = (uci: string) => {
+          const match = uci.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
+          if (!match) return uci || 'onbekend';
+          try {
+            const copy = new Chess(position.fen);
+            return copy.move({ from: match[1].toLowerCase() as Square, to: match[2].toLowerCase() as Square, promotion: (match[3]?.toLowerCase() ?? 'q') as 'q' | 'r' | 'b' | 'n' }).san;
+          } catch { return uci; }
+        };
+        const cpScore = (pv: { cp?: number; mate?: number }) => pv.mate !== undefined ? (pv.mate > 0 ? 10000 : -10000) : (pv.cp ?? 0);
+        let lossCp: number | null = null;
+        let status: string;
+        if (bestUci === actualUci) {
+          lossCp = 0;
+          status = 'Beste enginekeuze in deze analyse';
+        } else if (!playedPv) {
+          status = 'Niet in top 5 — exact evaluatieverlies onbekend';
+        } else {
+          const calculatedLoss = evaluationLossCp(cpScore(bestPv), cpScore(playedPv), position.color);
+          if (calculatedLoss === null) {
+            status = 'Evaluatieverschil niet beschikbaar';
+          } else {
+            lossCp = calculatedLoss;
+            status = lossCp >= 200 ? 'Grote evaluatieafwijking — controleer tactiek' : lossCp >= 80 ? 'Mogelijk onnauwkeurig — nader bekijken' : 'Kleine evaluatieafwijking';
+          }
+        }
+        findings.push({ ply: position.ply, san: position.san, bestMove: sanForUci(bestUci), lossCp, status });
       }
       setEngineLineAudits(previous => ({
         ...previous,
