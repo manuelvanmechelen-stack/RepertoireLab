@@ -9,7 +9,7 @@ import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/s
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
-import { evaluationLossCp } from '../src/study/engineAudit.mjs';
+import { evaluationLossCp, getEngineAuditPositions } from '../src/study/engineAudit.mjs';
 
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
@@ -60,6 +60,26 @@ equal(evaluationLossCp(30, -70, 'w'), 100, 'wit verliest 1 pion bij evaluatiedal
 equal(evaluationLossCp(-30, 70, 'b'), 100, 'zwart verliest 1 pion wanneer wit-evaluatie van -0.30 naar +0.70 gaat');
 equal(evaluationLossCp(50, 10, 'b'), 0, 'zwart krijgt geen negatieve verlieswaarde als de gespeelde zet beter scoort');
 equal(evaluationLossCp(Number.NaN, 10, 'w'), null, 'ongeldige engine-evaluatie levert geen verlieswaarde op');
+
+// Engine audits must analyse each move from its actual pre-move position.
+const standardAuditPgn = '1. e4 e5 2. Nf3 Nc6 *';
+const whiteAuditPositions = getEngineAuditPositions(standardAuditPgn, 'Wit');
+equal(whiteAuditPositions.length, 2, 'engine-audit selecteert alleen de eigen witte zetten');
+equal(whiteAuditPositions[0].fen, new Chess().fen(), 'eerste witte engine-analyse gebruikt de beginstelling');
+const beforeNf3 = new Chess();
+beforeNf3.move('e4');
+beforeNf3.move('e5');
+equal(whiteAuditPositions[1].fen, beforeNf3.fen(), 'volgende engine-analyse gebruikt de stelling vóór de eigen zet');
+equal(whiteAuditPositions[1].ply, 3, 'engine-audit bewaart het oorspronkelijke halve-zetnummer');
+equal(getEngineAuditPositions(standardAuditPgn, 'Wit', 1).length, 1, 'engine-audit respecteert de limiet op eigen zetten');
+
+const customAuditFen = '8/8/8/8/8/8/4k3/7K b - - 0 1';
+const customAuditPgn = '[Event "Custom FEN engine audit"]\n[SetUp "1"]\n[FEN "' + customAuditFen + '"]\n\n1... Kf3 2. Kg1 *';
+const blackAuditPositions = getEngineAuditPositions(customAuditPgn, 'Zwart');
+equal(blackAuditPositions.length, 1, 'custom-FEN audit selecteert de eerste zwarte repertoirezet');
+equal(blackAuditPositions[0].fen, customAuditFen, 'zwarte engine-audit start vanuit de PGN-FEN en niet vanuit de eindstelling');
+equal(blackAuditPositions[0].uci, 'e2f3', 'engine-audit bewaart de exacte gespeelde UCI-zet');
+throws(() => getEngineAuditPositions('1. e4 Qh9', 'Wit'), 'ongeldige PGN wordt niet stilzwijgend geanalyseerd');
 
 // 0e. Rating/database coverage must be weighted by observed move frequency.
 const coverageSummary = summarizeCoverageMoves([
