@@ -2261,8 +2261,8 @@ function App() {
         }
         const actualUci = position.uci;
         const bestPv = analysis.pvs[0];
-        const playedPv = analysis.pvs.find(pv => pv.moves.trim().split(/\\s+/)[0] === actualUci);
-        const bestUci = bestPv?.moves.trim().split(/\\s+/)[0] ?? '';
+        const playedPv = analysis.pvs.find(pv => pv.moves.trim().split(/\s+/)[0] === actualUci);
+        const bestUci = bestPv?.moves.trim().split(/\s+/)[0] ?? '';
         const sanForUci = (uci: string) => {
           const match = uci.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
           if (!match) return uci || 'onbekend';

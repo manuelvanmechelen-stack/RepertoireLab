@@ -74,7 +74,7 @@ equal(whiteAuditPositions[1].ply, 3, 'engine-audit bewaart het oorspronkelijke h
 equal(getEngineAuditPositions(standardAuditPgn, 'Wit', 1).length, 1, 'engine-audit respecteert de limiet op eigen zetten');
 
 const customAuditFen = '8/8/8/8/8/8/4k3/7K b - - 0 1';
-const customAuditPgn = '[Event "Custom FEN engine audit"]\\n[SetUp "1"]\\n[FEN "' + customAuditFen + '"]\\n\\n1... Kf3 2. Kg1 *';
+const customAuditPgn = '[Event "Custom FEN engine audit"]\n[SetUp "1"]\n[FEN "' + customAuditFen + '"]\n\n1... Kf3 2. Kg1 *';
 const blackAuditPositions = getEngineAuditPositions(customAuditPgn, 'Zwart');
 equal(blackAuditPositions.length, 1, 'custom-FEN audit selecteert de eerste zwarte repertoirezet');
 equal(blackAuditPositions[0].fen, customAuditFen, 'zwarte engine-audit start vanuit de PGN-FEN en niet vanuit de eindstelling');
