@@ -371,6 +371,21 @@ equal(splitPgnCollection('[Event "Eén"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *
 // 11. Exercise the exact backup validator used by the restore UI.
 const checkedBackup = validateBackup(backup);
 equal(checkedBackup.lines.length, 1, 'validator accepteert geldige variant');
+const fortyEngineFindings = Array.from({ length: 40 }, (_, index) => ({
+  ply: index + 1, san: 'e4', bestMove: 'e4', lossCp: 0, status: 'Beste enginekeuze',
+}));
+const fortyMoveEngineAudit = {
+  moves: backup.lines[0].moves, depth: 16, analyzedAt: fixedNow, findings: fortyEngineFindings,
+};
+const fortyMoveAuditBackup = validateBackup({
+  ...backup, engineLineAudits: { 'line-1': fortyMoveEngineAudit },
+});
+equal(fortyMoveAuditBackup.engineLineAudits['line-1'].findings.length, 40, 'back-up accepteert alle veertig enginebevindingen van een volledige variant-audit');
+throws(() => validateBackup({
+  ...backup,
+  engineLineAudits: { 'line-1': { ...fortyMoveEngineAudit, findings: [...fortyEngineFindings, { ...fortyEngineFindings[0], ply: 41 }] } },
+}), 'back-up weigert meer dan veertig enginebevindingen');
+
 const backupWithFsrsCard = validateBackup({
   ...backup,
   lines: [{ ...backup.lines[0], fsrsCard: extraFsrsFirst.fsrsCard }],
@@ -479,6 +494,15 @@ throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'revi
 // 13. Cloud backup uploads/restores must validate the complete payload, not just its envelope.
 const validCloudPayload = { ...backup, app: 'RepertoireLab', version: 2, exportedAt: new Date(fixedNow).toISOString() };
 equal(validateCloudBackupPayload(validCloudPayload), validCloudPayload, 'geldige volledige back-up is geschikt voor cloudsynchronisatie');
+const fortyMoveCloudPayload = {
+  ...validCloudPayload, engineLineAudits: { 'line-1': fortyMoveEngineAudit },
+};
+equal(validateCloudBackupPayload(fortyMoveCloudPayload), fortyMoveCloudPayload, 'cloudsynchronisatie accepteert een geldige audit van veertig zetten');
+throws(() => validateCloudBackupPayload({
+  ...fortyMoveCloudPayload,
+  engineLineAudits: { 'line-1': { ...fortyMoveEngineAudit, findings: [...fortyEngineFindings, { ...fortyEngineFindings[0], ply: 41 }] } },
+}), 'cloud weigert een audit die de limiet van veertig zetten overschrijdt');
+
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, app: 'OtherApp' }), 'cloud weigert een back-up van een andere app');
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [{ ...backup.lines[0], moves: '1. e4 Qh9' }] }), 'cloud weigert een ongeldige variant vóór upload');
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [backup.lines[0], { ...backup.lines[0], name: 'Dubbele variant' }] }), 'cloud weigert dubbele variant-ID’s vóór upload');
