@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
-import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
+import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isValidFsrsCardState, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
+import { validateCloudBackupPayload } from '../src/study/cloudBackup.mjs';
+import { revokeSupabaseSession } from '../src/study/supabaseAuth.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
@@ -318,6 +320,19 @@ const extraFsrsLineGood = scheduleFsrsLineGrade(extraFsrsLineAgain, 'good', fixe
 equal(extraFsrsLineGood.seen, 2, 'FSRS herstelt kaartstatus bij een volgende beoordeling');
 check(extraFsrsLineGood.fsrsCard.last_review === fixedNow + 60_000, 'FSRS bewaart het tijdstip van de laatste beoordeling');
 throws(() => scheduleFsrsLineGrade(undefined, 'unknown', fixedNow), 'FSRS weigert onbekende beoordelingen');
+check(isValidFsrsCardState(extraFsrsFirst.fsrsCard), 'FSRS valideert een volledige kaart uit de scheduler');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, state: 9 }), 'FSRS weigert een onbekende kaartstatus');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, reps: -1 }), 'FSRS weigert een negatieve herhalingsteller');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, learning_steps: 1.5 }), 'FSRS weigert een niet-geheel leerstapnummer');
+check(!isValidFsrsCardState({ ...extraFsrsFirst.fsrsCard, elapsed_days: -1 }), 'FSRS weigert negatieve verstreken dagen');
+const malformedFsrsRecovery = scheduleFsrsMoveResult({
+  seen: 3,
+  misses: 1,
+  fsrsCard: { ...extraFsrsFirst.fsrsCard, state: 9 },
+}, true, fixedNow + 2000);
+const freshFsrsRecovery = scheduleFsrsMoveResult(undefined, true, fixedNow + 2000);
+equal(malformedFsrsRecovery.fsrsCard.due, freshFsrsRecovery.fsrsCard.due, 'beschadigde FSRS-kaart wordt veilig als nieuwe kaart ingepland');
+equal(malformedFsrsRecovery.seen, 4, 'herstel van een beschadigde FSRS-kaart behoudt de pogingenteller');
 
 const qualityCheckLine = [{ id: 'qualityCheck', name: 'Testlijn', color: 'Wit', moves: '1. e4 e5 2. Nf3 Nc6', note: 'Plan' }];
 const qualityCheck = calculateRepertoireQuality(qualityCheckLine, {
@@ -356,6 +371,39 @@ equal(splitPgnCollection('[Event "Eén"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *
 // 11. Exercise the exact backup validator used by the restore UI.
 const checkedBackup = validateBackup(backup);
 equal(checkedBackup.lines.length, 1, 'validator accepteert geldige variant');
+const fortyEngineFindings = Array.from({ length: 40 }, (_, index) => ({
+  ply: index + 1, san: 'e4', bestMove: 'e4', lossCp: 0, status: 'Beste enginekeuze',
+}));
+const fortyMoveEngineAudit = {
+  moves: backup.lines[0].moves, depth: 16, analyzedAt: fixedNow, findings: fortyEngineFindings,
+};
+const fortyMoveAuditBackup = validateBackup({
+  ...backup, engineLineAudits: { 'line-1': fortyMoveEngineAudit },
+});
+equal(fortyMoveAuditBackup.engineLineAudits['line-1'].findings.length, 40, 'back-up accepteert alle veertig enginebevindingen van een volledige variant-audit');
+throws(() => validateBackup({
+  ...backup,
+  engineLineAudits: { 'line-1': { ...fortyMoveEngineAudit, findings: [...fortyEngineFindings, { ...fortyEngineFindings[0], ply: 41 }] } },
+}), 'back-up weigert meer dan veertig enginebevindingen');
+
+const backupWithFsrsCard = validateBackup({
+  ...backup,
+  lines: [{ ...backup.lines[0], fsrsCard: extraFsrsFirst.fsrsCard }],
+});
+check(isValidFsrsCardState(backupWithFsrsCard.lines[0].fsrsCard), 'back-up bewaart een volledige geldige FSRS-kaart');
+throws(() => validateBackup({
+  ...backup,
+  lines: [{ ...backup.lines[0], fsrsCard: { ...extraFsrsFirst.fsrsCard, state: 9 } }],
+}), 'back-up weigert een ongeldige FSRS-kaart op een variant');
+throws(() => validateBackup({
+  ...backup,
+  moveMemory: {
+    'line-1:0': {
+      seen: 1, misses: 0, due: fixedNow, intervalDays: 1,
+      fsrsCard: { ...extraFsrsFirst.fsrsCard, reps: -1 },
+    },
+  },
+}), 'back-up weigert een ongeldige FSRS-kaart op een individuele zet');
 equal(checkedBackup.repertoires.length, 1, 'validator accepteert geldig repertoire');
 equal(checkedBackup.activeRepertoireId, 'rep-1', 'validator bewaart geldig actieve repertoire');
 equal(checkedBackup.moveMemory['line-1:0'].misses, 1, 'validator bewaart herhalingsgegevens');
@@ -442,5 +490,69 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+// 13. Cloud backup uploads/restores must validate the complete payload, not just its envelope.
+const validCloudPayload = { ...backup, app: 'RepertoireLab', version: 2, exportedAt: new Date(fixedNow).toISOString() };
+equal(validateCloudBackupPayload(validCloudPayload), validCloudPayload, 'geldige volledige back-up is geschikt voor cloudsynchronisatie');
+const fortyMoveCloudPayload = {
+  ...validCloudPayload, engineLineAudits: { 'line-1': fortyMoveEngineAudit },
+};
+equal(validateCloudBackupPayload(fortyMoveCloudPayload), fortyMoveCloudPayload, 'cloudsynchronisatie accepteert een geldige audit van veertig zetten');
+throws(() => validateCloudBackupPayload({
+  ...fortyMoveCloudPayload,
+  engineLineAudits: { 'line-1': { ...fortyMoveEngineAudit, findings: [...fortyEngineFindings, { ...fortyEngineFindings[0], ply: 41 }] } },
+}), 'cloud weigert een audit die de limiet van veertig zetten overschrijdt');
+
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, app: 'OtherApp' }), 'cloud weigert een back-up van een andere app');
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [{ ...backup.lines[0], moves: '1. e4 Qh9' }] }), 'cloud weigert een ongeldige variant vóór upload');
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [backup.lines[0], { ...backup.lines[0], name: 'Dubbele variant' }] }), 'cloud weigert dubbele variant-ID’s vóór upload');
+throws(() => validateCloudBackupPayload({ ...validCloudPayload, moveMemory: { 'line-1:0': { seen: -1, misses: 0, due: fixedNow, intervalDays: 0 } } }), 'cloud weigert ongeldige spaced-repetition-data vóór upload');
+
+
+// 14. Supabase sign-out revokes only the current refresh-token session.
+let logoutRequest;
+const successfulLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co/',
+  apiKey: 'sb_publishable_test',
+  accessToken: 'test-access-token',
+  fetchImpl: async (url, init) => {
+    logoutRequest = { url, init };
+    return { ok: true, status: 204 };
+  },
+});
+equal(successfulLogout.ok, true, 'succesvolle Supabase logout bevestigt server-side intrekking');
+equal(successfulLogout.status, 204, 'logout bewaart de HTTP-status voor de UI');
+equal(logoutRequest.url, 'https://project.supabase.co/auth/v1/logout?scope=local', 'logout trekt alleen de huidige sessie in');
+equal(logoutRequest.init.method, 'POST', 'logout gebruikt POST');
+equal(logoutRequest.init.headers.apikey, 'sb_publishable_test', 'logout gebruikt de publieke projectkey');
+equal(logoutRequest.init.headers.Authorization, 'Bearer test-access-token', 'logout autoriseert met het huidige access-token');
+
+const expiredLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co',
+  apiKey: 'sb_publishable_test',
+  accessToken: 'expired-token',
+  fetchImpl: async () => ({ ok: false, status: 401 }),
+});
+equal(expiredLogout.ok, false, 'een verlopen sessie wordt niet als nieuw ingetrokken gemeld');
+equal(expiredLogout.status, 401, 'een ongeldige sessie-status blijft beschikbaar voor de UI');
+
+const failedLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co',
+  apiKey: 'sb_publishable_test',
+  accessToken: 'test-access-token',
+  fetchImpl: async () => { throw new Error('offline'); },
+});
+equal(failedLogout.ok, false, 'netwerkfout blokkeert lokale uitlogafhandeling niet');
+equal(failedLogout.status, null, 'netwerkfout wordt zonder gevoelige details teruggegeven');
+
+let missingConfigFetchCalled = false;
+const missingConfigLogout = await revokeSupabaseSession({
+  supabaseUrl: 'https://project.supabase.co',
+  apiKey: '',
+  accessToken: 'test-access-token',
+  fetchImpl: async () => { missingConfigFetchCalled = true; return { ok: true, status: 204 }; },
+});
+equal(missingConfigLogout.ok, false, 'ontbrekende Supabase-configuratie meldt geen intrekking');
+equal(missingConfigFetchCalled, false, 'ontbrekende configuratie start geen netwerkverzoek');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');

@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { isValidFsrsCardState } from './scheduling.mjs';
 
 function isRecord(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -13,9 +14,6 @@ function strictPgn(pgn) {
 export function validateBackup(raw) {
   if (!isRecord(raw) || !Array.isArray(raw.lines)) throw new Error('Dit bestand is geen geldige RepertoireLab-back-up.');
   const lineIds = new Set();
-  const validFsrsCard = value => isRecord(value) && Number.isFinite(value.due) && value.due >= 0 &&
-    (value.last_review === null || Number.isFinite(value.last_review)) && Number.isFinite(value.stability) && value.stability >= 0 &&
-    Number.isFinite(value.difficulty) && value.difficulty >= 0 && Number.isFinite(value.scheduled_days) && value.scheduled_days >= 0;
   const lines = raw.lines.map((item, index) => {
     if (!isRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
       typeof item.moves !== 'string' || !['Wit', 'Zwart'].includes(item.color) ||
@@ -25,13 +23,16 @@ export function validateBackup(raw) {
     if (lineIds.has(item.id)) throw new Error('Dubbel variant-ID gevonden: ' + item.id + '. Er is niets gewijzigd.');
     lineIds.add(item.id);
     try { strictPgn(item.moves); } catch { throw new Error('Ongeldige of lege zetten in variant: ' + item.name + '. Er is niets gewijzigd.'); }
+    if (item.fsrsCard !== undefined && !isValidFsrsCardState(item.fsrsCard)) {
+      throw new Error('Variant ' + item.name + ' bevat een ongeldige FSRS-herhalingskaart. Er is niets gewijzigd.');
+    }
     return {
       id: item.id, name: item.name, moves: item.moves, color: item.color, tags: item.tags,
       note: item.note, repertoireId: typeof item.repertoireId === 'string' ? item.repertoireId : undefined,
       due: Number.isFinite(item.due) && item.due >= 0 ? item.due : 0,
       seen: Number.isFinite(item.seen) && item.seen >= 0 ? item.seen : 0,
       intervalDays: Number.isFinite(item.intervalDays) && item.intervalDays >= 0 ? item.intervalDays : undefined,
-      fsrsCard: validFsrsCard(item.fsrsCard) ? item.fsrsCard : undefined,
+      fsrsCard: item.fsrsCard,
     };
   });
   const rawReps = Array.isArray(raw.repertoires) ? raw.repertoires : [];
@@ -49,14 +50,14 @@ export function validateBackup(raw) {
     Number.isFinite(entry.misses) && entry.misses >= 0 && Number.isFinite(entry.due) && entry.due >= 0 &&
     Number.isFinite(entry.intervalDays) && entry.intervalDays >= 0 &&
     (entry.lastResult === undefined || entry.lastResult === 'good' || entry.lastResult === 'miss') &&
-    (entry.fsrsCard === undefined || validFsrsCard(entry.fsrsCard)));
+    (entry.fsrsCard === undefined || isValidFsrsCardState(entry.fsrsCard)));
   if (raw.missedMoves !== undefined && !validCounterMap(raw.missedMoves)) throw new Error('De foutenteller in deze back-up is ongeldig.');
   if (raw.moveMemory !== undefined && !validMemoryMap(raw.moveMemory)) throw new Error('De herhalingsgegevens in deze back-up zijn ongeldig.');
   const validEngineAuditMap = value => isRecord(value) && Object.entries(value).every(([key, audit]) =>
     key.length > 0 && isRecord(audit) && typeof audit.moves === 'string' &&
     Number.isInteger(audit.depth) && audit.depth >= 1 && audit.depth <= 30 &&
     Number.isFinite(audit.analyzedAt) && audit.analyzedAt >= 0 &&
-    Array.isArray(audit.findings) && audit.findings.length <= 10 &&
+    Array.isArray(audit.findings) && audit.findings.length <= 40 &&
     audit.findings.every(item => isRecord(item) && Number.isInteger(item.ply) && item.ply >= 1 &&
       typeof item.san === 'string' && typeof item.bestMove === 'string' && typeof item.status === 'string' &&
       (item.lossCp === null || (typeof item.lossCp === 'number' && Number.isFinite(item.lossCp) && item.lossCp >= 0))));

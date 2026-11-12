@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { validateCloudBackupPayload } from '../study/cloudBackup.mjs';
+import { revokeSupabaseSession } from '../study/supabaseAuth.mjs';
 
 type Backup = {
   app: string;
@@ -107,9 +109,7 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
       const serialized = JSON.stringify(backup);
       if (serialized.length > 8_000_000) throw new Error('Deze back-up is groter dan 8 MB. Exporteer hem lokaal en verklein de inhoud voordat je synchroniseert.');
       const validated = JSON.parse(serialized) as Backup;
-      if (!validated || validated.app !== 'RepertoireLab' || !Array.isArray(validated.lines) || !Array.isArray(validated.repertoires)) {
-        throw new Error('De lokale back-up heeft geen geldige RepertoireLab-structuur.');
-      }
+      validateCloudBackupPayload(validated);
       await request('/rest/v1/repertoirelab_backups?on_conflict=user_id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
@@ -127,21 +127,47 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
       const token = await getToken();
       const rows = await request('/rest/v1/repertoirelab_backups?select=payload,updated_at&user_id=eq.' + encodeURIComponent(session!.user.id) + '&limit=1', {}, token);
       if (!Array.isArray(rows) || !rows[0]?.payload) throw new Error('Er staat nog geen back-up in de cloud. Synchroniseer dit apparaat eerst.');
-      const payload = rows[0].payload as Partial<Backup>;
-      if (payload.app !== 'RepertoireLab' || !Array.isArray(payload.lines) || !Array.isArray(payload.repertoires)) {
-        throw new Error('De cloudback-up is beschadigd of hoort niet bij RepertoireLab. Je lokale gegevens zijn niet gewijzigd.');
-      }
+      const payload = validateCloudBackupPayload(rows[0].payload) as Partial<Backup>;
       await onRestore(payload);
       setMessage('Cloudback-up geladen. Laatste cloudupdate: ' + (rows[0].updated_at ? new Date(rows[0].updated_at).toLocaleString() : 'onbekend') + '.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Herstellen uit cloud mislukt.'); }
     finally { setBusy(false); }
   }
 
-  function logout() {
+  async function logout() {
+    setBusy(true);
+    setMessage('');
+
+    // Start server-side revocation first, then clear this device immediately.
+    // A network failure must never leave the local session active.
+    const pendingRevocation = session
+      ? revokeSupabaseSession({
+          supabaseUrl: SUPABASE_URL,
+          apiKey: SUPABASE_KEY,
+          accessToken: session.access_token,
+        })
+      : Promise.resolve({ ok: false, status: null });
+
     try { sessionStorage.removeItem(SESSION_KEY); } catch { /* private browsing may block session storage */ }
     setSession(null);
     setPassword('');
-    setMessage('Uitgelogd op dit apparaat.');
+
+    let revocation: { ok: boolean; status: number | null } = { ok: false, status: null };
+    try {
+      revocation = await pendingRevocation;
+    } catch {
+      // Local sign-out remains complete even if revocation cannot be attempted.
+    } finally {
+      setBusy(false);
+    }
+
+    if (revocation.ok) {
+      setMessage('Uitgelogd. Supabase heeft deze cloudsessie ingetrokken.');
+    } else if (revocation.status && [401, 403, 404].includes(revocation.status)) {
+      setMessage('Uitgelogd. Supabase meldt dat deze sessie niet meer actief is.');
+    } else {
+      setMessage('Lokaal uitgelogd. De intrekking bij Supabase kon niet worden bevestigd; controleer je verbinding en beëindig de sessie zo nodig via Supabase Auth.');
+    }
   }
 
   return <section className="repertoire-builder cloud-sync-panel">
