@@ -57,7 +57,7 @@ export function validateBackup(raw) {
     key.length > 0 && isRecord(audit) && typeof audit.moves === 'string' &&
     Number.isInteger(audit.depth) && audit.depth >= 1 && audit.depth <= 30 &&
     Number.isFinite(audit.analyzedAt) && audit.analyzedAt >= 0 &&
-    Array.isArray(audit.findings) && audit.findings.length <= 10 &&
+    Array.isArray(audit.findings) && audit.findings.length <= 40 &&
     audit.findings.every(item => isRecord(item) && Number.isInteger(item.ply) && item.ply >= 1 &&
       typeof item.san === 'string' && typeof item.bestMove === 'string' && typeof item.status === 'string' &&
       (item.lossCp === null || (typeof item.lossCp === 'number' && Number.isFinite(item.lossCp) && item.lossCp >= 0))));
