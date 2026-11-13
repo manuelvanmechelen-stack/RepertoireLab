@@ -89,7 +89,7 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
   }
 
   const moveLabel = (move, movePly) => {
-    const fullmove = Number(String(move?.before ?? '').split(/\\s+/)[5]);
+    const fullmove = Number(String(move?.before ?? '').split(/\s+/)[5]);
     const number = Number.isFinite(fullmove) && fullmove > 0 ? fullmove : Math.floor(movePly / 2) + 1;
     return number + (move?.color === 'b' ? '...' : '.');
   };
