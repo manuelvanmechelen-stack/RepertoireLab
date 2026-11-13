@@ -545,4 +545,43 @@ const convergedSummary = analyzeTranspositions(convergingCustomLines)
 check(convergedSummary, 'transposition analysis includes the converged custom-FEN position');
 equal(convergedSummary.paths, 2, 'transposition analysis distinguishes different FEN roots with identical SAN paths');
 
+
+ 
+// 17. Game review must start both the played game and repertoire lines from their PGN FEN.
+const customFenReviewStart = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
+const customFenReview = analyzeGameAgainstRepertoire(
+  `[Event "Custom-FEN review"]
+[SetUp "1"]
+[FEN "${customFenReviewStart}"]
+
+12... d5 *`,
+  [{
+    id: 'custom-review-line',
+    name: 'Zwart speelt ...e5',
+    moves: `[SetUp "1"]
+[FEN "${customFenReviewStart}"]
+
+12... e5 *`,
+  }],
+);
+equal(customFenReview.firstDeviation?.ply, 0, 'custom-FEN-review vindt de afwijking vanaf de juiste beginstelling');
+equal(customFenReview.firstDeviation?.side, 'Zwart', 'custom-FEN-review gebruikt de kleur aan zet uit de FEN');
+equal(customFenReview.firstDeviation?.expectedMoves.join(','), 'e5', 'custom-FEN-review toont de opgeslagen zwarte voortzetting');
+check(customFenReview.summary.includes('12... d5 (Zwart)'), 'custom-FEN-review behoudt het FEN-zetnummer in het verslag');
+
+const customFenReviewTransposition = analyzeGameAgainstRepertoire(
+  '1. e4 e5 *',
+  [{
+    id: 'custom-review-transposition',
+    name: 'Zwart vanaf FEN na e4',
+    moves: `[SetUp "1"]
+[FEN "${customStartFen}"]
+
+1... e5 *`,
+  }],
+);
+equal(customFenReviewTransposition.firstDeviation, null, 'game review herkent een standaardpartij die naar een custom-FEN-repertoirepositie transponeert');
+equal(customFenReviewTransposition.matchedPlies, 1, 'game review vervolgt na de transpositie met de opgeslagen zet');
+equal(customFenReviewTransposition.transpositionCount, 1, 'game review telt de zetten tot de custom-FEN-transpositie');
+
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
