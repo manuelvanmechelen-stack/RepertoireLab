@@ -13,6 +13,7 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
   game.loadPgn(String(pgn ?? ''));
   const history = game.history({ verbose: true });
   const headers = game.header();
+  const gameStartFen = game.getHeaders().FEN;
   if (!history.length) throw new Error('De partij bevat geen zetten.');
 
   const nodes = new Map();
@@ -22,7 +23,8 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
       replay.loadPgn(String(line.moves ?? ''));
       const moves = replay.history({ verbose: true });
       if (!moves.length) continue;
-      const cursor = new Chess();
+      const startFen = replay.getHeaders().FEN;
+      const cursor = startFen ? new Chess(startFen) : new Chess();
       for (const move of moves) {
         const key = positionKey(cursor);
         const node = nodes.get(key) ?? { continuations: new Map() };
@@ -38,7 +40,7 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
     }
   }
 
-  const played = new Chess();
+  const played = gameStartFen ? new Chess(gameStartFen) : new Chess();
   let firstDeviation = null;
   let matchedPlies = 0;
   let bestMatchName = '';
@@ -80,13 +82,17 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
 
     firstDeviation = {
       ply, san, expectedMoves: expected.map(item => item.san),
-      side: ply % 2 === 0 ? 'Wit' : 'Zwart',
+      side: history[ply].color === 'b' ? 'Zwart' : 'Wit',
       kind: node ? 'deviation' : 'gap',
     };
     break;
   }
 
-  const moveLabel = movePly => Math.floor(movePly / 2) + 1 + (movePly % 2 === 0 ? '.' : '...');
+  const moveLabel = (move, movePly) => {
+    const fullmove = Number(String(move?.before ?? '').split(/\\s+/)[5]);
+    const number = Number.isFinite(fullmove) && fullmove > 0 ? fullmove : Math.floor(movePly / 2) + 1;
+    return number + (move?.color === 'b' ? '...' : '.');
+  };
   const players = (headers.White ?? 'Wit') + ' – ' + (headers.Black ?? 'Zwart');
   const result = headers.Result ?? '*';
   const matchSummary = matchedPlies
@@ -94,7 +100,7 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
     : 'geen directe repertoirezetten gematcht';
   let deviationSummary = 'geen afwijking gevonden binnen de gespeelde zetten';
   if (firstDeviation?.kind === 'deviation') {
-    deviationSummary = 'eerste afwijking bij ' + moveLabel(firstDeviation.ply) + ' ' + firstDeviation.san +
+    deviationSummary = 'eerste afwijking bij ' + moveLabel(history[firstDeviation.ply], firstDeviation.ply) + ' ' + firstDeviation.san +
       ' (' + firstDeviation.side + ')' +
       (firstDeviation.expectedMoves.length ? '; opgeslagen vervolg(en): ' + firstDeviation.expectedMoves.join(', ') : '');
   } else if (firstDeviation?.kind === 'gap') {
