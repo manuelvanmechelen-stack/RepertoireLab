@@ -9,7 +9,7 @@ import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs'
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
-import { identifyOpening } from './study/openingCatalog.mjs';
+import { identifyOpening, identifyOpeningFull } from './study/openingCatalog.mjs';
 import { evaluationLossCp } from './study/engineAudit.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import {
@@ -903,6 +903,7 @@ function App() {
   const [tab, setTab] = useState<'overzicht' | 'repertoire' | 'trainen'>(
     'overzicht'
   );
+  const [currentOpening, setCurrentOpening] = useState<ReturnType<typeof identifyOpening>>(null);
   const [query, setQuery] = useState('');
   const [colorFilter, setColorFilter] = useState<'Alles' | 'Wit' | 'Zwart'>(
     'Alles'
@@ -1030,7 +1031,17 @@ function App() {
     id: '__draft__', repertoireId: activeRepertoireId, name: activeRepertoire?.name ?? 'Nieuw repertoire',
     color: activeRepertoire?.color ?? newColor, moves: '', tags: [], note: '', due: 0, seen: 0,
   };
-  const currentOpening = useMemo(() => identifyOpening(current.moves), [current.moves]);
+  useEffect(() => {
+    if (tab !== 'repertoire') return;
+    const fallback = identifyOpening(current.moves);
+    setCurrentOpening(fallback);
+    if (!current.moves.trim()) return;
+    let cancelled = false;
+    identifyOpeningFull(current.moves)
+      .then(match => { if (!cancelled) setCurrentOpening(match); })
+      .catch(() => { /* Keep the curated fallback if the optional catalog chunk fails to load. */ });
+    return () => { cancelled = true; };
+  }, [tab, current.moves]);
   const recommendedMoves = useMemo(() => {
     if (!explorer?.moves?.length || explorerFen !== game.fen()) return [];
     const whiteToMove = game.turn() === 'w';
