@@ -1,6 +1,4 @@
 import { Chess } from 'chess.js';
-import { LICHESS_OPENINGS } from './lichessOpenings.mjs';
-
 // Offline ECO recognition uses move sequences from the CC0 Lichess dataset,
 // supplemented by a small set of curated Dutch labels. Online Explorer adds live statistics.
 const OPENINGS = [
@@ -58,23 +56,41 @@ const parsePgnMoves = pgn => String(pgn ?? '')
 
 // Lichess's CC0 ECO dataset supplies broad offline coverage. Hand-picked entries
 // remain as fallbacks for common labels where their wording is more useful.
-const compiled = [
-  ...OPENINGS.map(([eco, name, pgn]) => ({ eco, name, moves: parsePgnMoves(pgn) })),
-  ...LICHESS_OPENINGS.map(({ eco, name, pgn }) => ({ eco, name, moves: parsePgnMoves(pgn) })),
-].filter(opening => opening.moves.length > 0);
+const compileCatalog = entries => entries
+  .map(entry => {
+    const [eco, name, pgn] = Array.isArray(entry)
+      ? entry
+      : [entry.eco, entry.name, entry.pgn];
+    return { eco, name, moves: parsePgnMoves(pgn) };
+  })
+  .filter(opening => opening.moves.length > 0);
 
-/** Return the most specific offline ECO match for a PGN or SAN sequence. */
-export function identifyOpening(pgnOrMoves = '') {
-  let moves;
+// The small curated catalog is synchronous so the current line can be labeled
+// immediately. The full CC0 Lichess catalog is loaded only when the repertoire
+// workspace asks for comprehensive offline recognition.
+const compiled = compileCatalog(OPENINGS);
+let fullCatalogPromise;
+
+async function getFullCatalog() {
+  if (!fullCatalogPromise) {
+    fullCatalogPromise = import('./lichessOpenings.mjs').then(({ LICHESS_OPENINGS }) =>
+      compileCatalog([...OPENINGS.map(([eco, name, pgn]) => ({ eco, name, pgn })), ...LICHESS_OPENINGS])
+    );
+  }
+  return fullCatalogPromise;
+}
+
+function parseInputMoves(pgnOrMoves) {
   try {
-    if (Array.isArray(pgnOrMoves)) moves = pgnOrMoves.map(NORMALIZE);
-    else {
-      const game = new Chess();
-      game.loadPgn(String(pgnOrMoves ?? ''));
-      moves = game.history().map(NORMALIZE);
-    }
+    if (Array.isArray(pgnOrMoves)) return pgnOrMoves.map(NORMALIZE);
+    const game = new Chess();
+    game.loadPgn(String(pgnOrMoves ?? ''));
+    return game.history().map(NORMALIZE);
   } catch { return null; }
-  const matches = compiled.filter(opening =>
+}
+
+function findOpening(moves, catalog) {
+  const matches = catalog.filter(opening =>
     opening.moves.length <= moves.length && opening.moves.every((move, index) => moves[index] === move)
   ).sort((a, b) => b.moves.length - a.moves.length || b.name.length - a.name.length || a.eco.localeCompare(b.eco));
   if (!matches.length) return null;
@@ -82,6 +98,23 @@ export function identifyOpening(pgnOrMoves = '') {
   return { eco: match.eco, name: match.name, matchedPlies: match.moves.length, exact: match.moves.length === moves.length };
 }
 
+/** Return the best match from the small synchronous fallback catalog. */
+export function identifyOpening(pgnOrMoves = '') {
+  const moves = parseInputMoves(pgnOrMoves);
+  return moves ? findOpening(moves, compiled) : null;
+}
+
+/** Load the complete Lichess catalog on demand and identify the most specific match. */
+export async function identifyOpeningFull(pgnOrMoves = '') {
+  const moves = parseInputMoves(pgnOrMoves);
+  if (!moves) return null;
+  return findOpening(moves, await getFullCatalog());
+}
+
 export function listOpeningCatalog() {
   return compiled.map(({ eco, name, moves }) => ({ eco, name, moves: [...moves] }));
+}
+
+export async function listFullOpeningCatalog() {
+  return (await getFullCatalog()).map(({ eco, name, moves }) => ({ eco, name, moves: [...moves] }));
 }

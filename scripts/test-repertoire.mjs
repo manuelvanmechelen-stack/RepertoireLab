@@ -8,7 +8,7 @@ import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
-import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
+import { identifyOpening, identifyOpeningFull, listOpeningCatalog, listFullOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
 
 let checks = 0;
@@ -42,16 +42,18 @@ const scotchOpening = identifyOpening('1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4');
 equal(scotchOpening?.eco, 'C45', 'Schots wordt offline herkend met ECO-code');
 equal(scotchOpening?.name, 'Schots – hoofdvariant', 'Schotse hoofdvariant krijgt de juiste naam');
 check(scotchOpening?.exact, 'exacte openingslijn wordt als exact gemarkeerd');
-const scotchPrefix = identifyOpening('1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Nf6 5. Nc3 Bb4 6. Nxc6 bxc6 7. e5 Qe7 8. Qe2 Nd5 9. Bd2');
-check(typeof scotchPrefix?.eco === 'string', 'verlengde lijn krijgt een ECO-herkenning uit de offline catalogus');
+const scotchPrefix = await identifyOpeningFull('1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Nf6 5. Nc3 Bb4 6. Nxc6 bxc6 7. e5 Qe7 8. Qe2 Nd5 9. Bd2');
+check(typeof scotchPrefix?.eco === 'string', 'verlengde lijn krijgt een ECO-herkenning uit de volledige offline catalogus');
 check(scotchPrefix?.exact === false, 'verlengde lijn krijgt voorlopige herkenning wanneer de volledige zettenreeks niet in de catalogus staat');
 equal(identifyOpening('ongeldige PGN'), null, 'ongeldige PGN geeft geen opening');
-check(listOpeningCatalog().length >= 35, 'offline catalogus bevat een bruikbare basisset');
-check(listOpeningCatalog().length >= 3800, 'offline catalogus bevat de volledige Lichess ECO-basisset');
-const najdorfOpening = identifyOpening('1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6');
+check(listOpeningCatalog().length >= 35, 'synchrone openingscatalogus bevat een bruikbare basisset');
+check(listOpeningCatalog().length < 100, 'synchrone fallback laadt niet de volledige openingsdatabase');
+const fullOpeningCatalog = await listFullOpeningCatalog();
+check(fullOpeningCatalog.length >= 3800, 'volledige Lichess ECO-basisset wordt op verzoek geladen');
+const najdorfOpening = await identifyOpeningFull('1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6');
 equal(najdorfOpening?.eco, 'B90', 'Najdorf wordt offline herkend met de verwachte ECO-code');
 check(najdorfOpening?.name.toLowerCase().includes('najdorf'), 'Najdorf-herkenning bevat de openingsnaam');
-const catalanOpening = identifyOpening('1. d4 Nf6 2. c4 e6 3. g3');
+const catalanOpening = await identifyOpeningFull('1. d4 Nf6 2. c4 e6 3. g3');
 check(catalanOpening?.name.toLowerCase().includes('catalan') || catalanOpening?.name.toLowerCase().includes('catalaans'), 'Catalaans wordt offline herkend');
 
 
