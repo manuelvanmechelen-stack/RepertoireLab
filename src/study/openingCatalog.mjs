@@ -57,7 +57,12 @@ const parsePgnMoves = pgn => String(pgn ?? '')
 // Lichess's CC0 ECO dataset supplies broad offline coverage. Hand-picked entries
 // remain as fallbacks for common labels where their wording is more useful.
 const compileCatalog = entries => entries
-  .map(({ eco, name, pgn }) => ({ eco, name, moves: parsePgnMoves(pgn) }))
+  .map(entry => {
+    const [eco, name, pgn] = Array.isArray(entry)
+      ? entry
+      : [entry.eco, entry.name, entry.pgn];
+    return { eco, name, moves: parsePgnMoves(pgn) };
+  })
   .filter(opening => opening.moves.length > 0);
 
 // The small curated catalog is synchronous so the current line can be labeled
