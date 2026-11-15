@@ -63,8 +63,9 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
     // castling rights and en-passant state; a mere similar-looking board is not enough.
     const lookahead = new Chess(played.fen());
     let rejoinPly = -1;
-    const lookaheadLimit = Math.min(history.length, ply + 13);
-    for (let candidatePly = ply; candidatePly < lookaheadLimit; candidatePly++) {
+    // A repertoire position may be reached after a long legal move-order transposition.
+    // Search the rest of the game rather than imposing an arbitrary 12-ply cutoff.
+    for (let candidatePly = ply; candidatePly < history.length; candidatePly++) {
       lookahead.move(history[candidatePly]);
       if (nodes.has(positionKey(lookahead))) {
         rejoinPly = candidatePly + 1;
