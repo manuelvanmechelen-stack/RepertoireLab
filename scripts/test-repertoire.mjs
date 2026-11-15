@@ -475,6 +475,14 @@ const transpositionReview = analyzeGameAgainstRepertoire(
 equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie met andere zettenvolgorde');
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
+
+const longTranspositionReview = analyzeGameAgainstRepertoire(
+  '1. g3 g6 2. f3 f6 3. e3 e6 4. d3 d6 5. c3 c6 6. b3 b6 7. a3 a6 8. Nh3 *',
+  [{ id: 'pawn-order', name: 'Pionnen in a-tot-g-volgorde', color: 'Wit', moves: '1. a3 a6 2. b3 b6 3. c3 c6 4. d3 d6 5. e3 e6 6. f3 f6 7. g3 g6 8. Nh3 *' }],
+);
+equal(longTranspositionReview.firstDeviation, null, 'review herkent een transpositie na meer dan twaalf halve zetten');
+equal(longTranspositionReview.transpositionCount, 14, 'review telt alle veertien halve zetten van de lange transpositie');
+equal(longTranspositionReview.matchedPlies, 1, 'review hervat repertoirematching na de lange transpositie');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
 // 13. Custom-FEN PGNs must branch from their declared starting position, not the standard root.
