@@ -105,7 +105,7 @@ export function analyzeGameAgainstRepertoire(pgn, lines) {
       ' (' + firstDeviation.side + ')' +
       (firstDeviation.expectedMoves.length ? '; opgeslagen vervolg(en): ' + firstDeviation.expectedMoves.join(', ') : '');
   } else if (firstDeviation?.kind === 'gap') {
-    deviationSummary = 'repertoiredekking ontbreekt vanaf ' + moveLabel(firstDeviation.ply) + ' ' + firstDeviation.san +
+    deviationSummary = 'repertoiredekking ontbreekt vanaf ' + moveLabel(history[firstDeviation.ply], firstDeviation.ply) + ' ' + firstDeviation.san +
       '; er was geen opgeslagen vervolg vanuit deze stelling';
   }
   const transpositionSummary = transpositionCount
