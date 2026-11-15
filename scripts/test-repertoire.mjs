@@ -468,6 +468,7 @@ equal(coveredGame.firstDeviation, null, 'een volledige match tot het einde van d
 check(coveredGame.summary.includes('Italiaans'), 'review herkent welke repertoirelijn gevolgd is');
 const uncoveredGame = analyzeGameAgainstRepertoire('1. e4 e5 2. Nf3', [{ name: 'Korte lijn', color: 'Wit', moves: '1. e4 e5' }]);
 equal(uncoveredGame.firstDeviation?.kind, 'gap', 'review herkent wanneer een gespeelde voortzetting buiten de opgeslagen lijn valt');
+check(uncoveredGame.summary.includes('2. Nf3'), 'gapmelding gebruikt het juiste PGN-zetnummer voor de afwijkende zet');
 const transpositionReview = analyzeGameAgainstRepertoire(
   '1. g3 d5 2. Nf3 Nf6 3. Bg2 g6 4. O-O',
   [{ id: 'fianchetto', name: 'Fianchetto-opbouw', color: 'Wit', moves: '1. Nf3 d5 2. g3 Nf6 3. Bg2 g6 4. O-O' }],
