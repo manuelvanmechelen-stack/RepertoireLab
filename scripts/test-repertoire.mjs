@@ -460,7 +460,7 @@ equal(exportedGames.length, 2, 'PGN-export schrijft elke variant als afzonderlij
 const exportedStandard = new Chess();
 exportedStandard.loadPgn(exportedGames[0]);
 equal(exportedStandard.history().join(' '), exportSource.history().join(' '), 'PGN-export bewaart de volledige standaard-zetvolgorde');
-equal(exportedStandard.header().Event, 'Schots "hoofdlijn"', 'PGN-export overschrijft Event veilig met de variantnaam');
+equal(exportedStandard.header().Event, "Schots 'hoofdlijn'", 'PGN-export normaliseert aanhalingstekens veilig in de Event-header');
 equal(exportedStandard.header().Site, 'RepertoireLab', 'PGN-export schrijft de RepertoireLab-bron');
 equal(exportedStandard.header().White, 'Repertoire', 'PGN-export markeert de eigen witte repertoirekleur');
 equal(exportedStandard.header().Black, 'Opponent', 'PGN-export markeert de tegenstander');
