@@ -450,7 +450,7 @@ const exportSource = new Chess();
 exportSource.header('Event', 'Imported event', 'Site', 'Original site', 'White', 'Alice', 'Black', 'Bob', 'Round', '3', 'Result', '1-0', 'ECO', 'C45');
 for (const san of ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']) exportSource.move(san);
 const customExportFen = '8/4k3/8/8/8/8/8/4K3 b - - 0 12';
-const customExportPgn = '[Event "Imported custom"]\\n[SetUp "1"]\\n[FEN "' + customExportFen + '"]\\n[Result "*"]\\n\\n12... Kd6 *';
+const customExportPgn = '[Event "Imported custom"]\n[SetUp "1"]\n[FEN "' + customExportFen + '"]\n[Result "*"]\n\n12... Kd6 *';
 const exportedCollection = exportRepertoirePgn([
   { name: 'Schots "hoofdlijn"', color: 'Wit', moves: exportSource.pgn() },
   { name: 'Custom start', color: 'Zwart', moves: customExportPgn },
@@ -466,7 +466,7 @@ equal(exportedStandard.header().White, 'Repertoire', 'PGN-export markeert de eig
 equal(exportedStandard.header().Black, 'Opponent', 'PGN-export markeert de tegenstander');
 equal(exportedStandard.header().Result, '1-0', 'PGN-export behoudt de bestaande partijuitslag');
 equal(exportedStandard.header().ECO, 'C45', 'PGN-export behoudt overige geïmporteerde metadata');
-equal((exportedGames[0].match(/^\\[Event /gm) ?? []).length, 1, 'PGN-export schrijft geen dubbele Event-header');
+equal((exportedGames[0].match(/^\[Event /gm) ?? []).length, 1, 'PGN-export schrijft geen dubbele Event-header');
 const exportedCustom = new Chess();
 exportedCustom.loadPgn(exportedGames[1]);
 equal(exportedCustom.header().SetUp, '1', 'PGN-export behoudt de custom-FEN SetUp-header');
@@ -475,7 +475,7 @@ const expectedCustomExport = new Chess(customExportFen);
 expectedCustomExport.move('Kd6');
 equal(exportedCustom.fen(), expectedCustomExport.fen(), 'PGN-export bewaart de eindstelling vanaf custom FEN');
 equal(exportedCustom.history().join(' '), 'Kd6', 'PGN-export bewaart zetten vanaf een custom FEN');
-equal((exportedGames[1].match(/^\\[Event /gm) ?? []).length, 1, 'custom-FEN export heeft precies één Event-header');
+equal((exportedGames[1].match(/^\[Event /gm) ?? []).length, 1, 'custom-FEN export heeft precies één Event-header');
 equal(exportRepertoirePgn([]), '', 'lege repertoire-export levert een lege string');
 throws(() => exportRepertoirePgn([{ name: 'Ongeldig', color: 'Wit', moves: '1. e4 Qh9' }]), 'PGN-export weigert ongeldige opgeslagen zetten');
 throws(() => exportRepertoirePgn([{ name: 'Leeg', color: 'Wit', moves: '' }]), 'PGN-export weigert lege varianten');
