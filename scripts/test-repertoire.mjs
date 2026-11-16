@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
+import { exportRepertoirePgn } from '../src/study/pgnExport.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
@@ -442,5 +443,40 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+
+// 13. PGN export: preserve move history/FEN, replace metadata once, and reject bad lines.
+const exportSource = new Chess();
+exportSource.header('Event', 'Imported event', 'Site', 'Original site', 'White', 'Alice', 'Black', 'Bob', 'Round', '3', 'Result', '1-0', 'ECO', 'C45');
+for (const san of ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']) exportSource.move(san);
+const customExportFen = '8/4k3/8/8/8/8/8/4K3 b - - 0 12';
+const customExportPgn = '[Event "Imported custom"]\\n[SetUp "1"]\\n[FEN "' + customExportFen + '"]\\n[Result "*"]\\n\\n12... Kd6 *';
+const exportedCollection = exportRepertoirePgn([
+  { name: 'Schots "hoofdlijn"', color: 'Wit', moves: exportSource.pgn() },
+  { name: 'Custom start', color: 'Zwart', moves: customExportPgn },
+]);
+const exportedGames = splitPgnCollection(exportedCollection);
+equal(exportedGames.length, 2, 'PGN-export schrijft elke variant als afzonderlijke partij');
+const exportedStandard = new Chess();
+exportedStandard.loadPgn(exportedGames[0]);
+equal(exportedStandard.history().join(' '), exportSource.history().join(' '), 'PGN-export bewaart de volledige standaard-zetvolgorde');
+equal(exportedStandard.header().Event, 'Schots "hoofdlijn"', 'PGN-export overschrijft Event veilig met de variantnaam');
+equal(exportedStandard.header().Site, 'RepertoireLab', 'PGN-export schrijft de RepertoireLab-bron');
+equal(exportedStandard.header().White, 'Repertoire', 'PGN-export markeert de eigen witte repertoirekleur');
+equal(exportedStandard.header().Black, 'Opponent', 'PGN-export markeert de tegenstander');
+equal(exportedStandard.header().Result, '1-0', 'PGN-export behoudt de bestaande partijuitslag');
+equal(exportedStandard.header().ECO, 'C45', 'PGN-export behoudt overige geïmporteerde metadata');
+equal((exportedGames[0].match(/^\\[Event /gm) ?? []).length, 1, 'PGN-export schrijft geen dubbele Event-header');
+const exportedCustom = new Chess();
+exportedCustom.loadPgn(exportedGames[1]);
+equal(exportedCustom.header().SetUp, '1', 'PGN-export behoudt de custom-FEN SetUp-header');
+equal(exportedCustom.header().FEN, customExportFen, 'PGN-export behoudt de exacte custom FEN');
+equal(exportedCustom.fen(), new Chess(customExportFen).move('Kd6') && new Chess(customExportFen).fen(), 'custom FEN blijft als bronpositie geldig');
+equal(exportedCustom.history().join(' '), 'Kd6', 'PGN-export bewaart zetten vanaf een custom FEN');
+equal((exportedGames[1].match(/^\\[Event /gm) ?? []).length, 1, 'custom-FEN export heeft precies één Event-header');
+equal(exportRepertoirePgn([]), '', 'lege repertoire-export levert een lege string');
+throws(() => exportRepertoirePgn([{ name: 'Ongeldig', color: 'Wit', moves: '1. e4 Qh9' }]), 'PGN-export weigert ongeldige opgeslagen zetten');
+throws(() => exportRepertoirePgn([{ name: 'Leeg', color: 'Wit', moves: '' }]), 'PGN-export weigert lege varianten');
+throws(() => exportRepertoirePgn([{ name: 'Verkeerde kleur', color: 'Paars', moves: '1. e4 e5' }]), 'PGN-export weigert een onbekende repertoirekleur');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
