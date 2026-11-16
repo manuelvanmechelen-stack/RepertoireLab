@@ -2,8 +2,8 @@ import { Chess } from 'chess.js';
 
 function cleanHeaderValue(value) {
   return String(value ?? '')
-    .replace(/[\\u0000-\\u001f\\u007f]/g, ' ')
-    .replace(/\\s+/g, ' ')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -47,5 +47,5 @@ export function exportRepertoirePgn(lines = []) {
     return game.pgn({ maxWidth: 100 }).trim();
   });
 
-  return games.length ? games.join('\\n\\n') + '\\n' : '';
+  return games.length ? games.join('\n\n') + '\n' : '';
 }
