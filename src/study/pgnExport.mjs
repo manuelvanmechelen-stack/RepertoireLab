@@ -3,12 +3,10 @@ import { Chess } from 'chess.js';
 function cleanHeaderValue(value) {
   return String(value ?? '')
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\\/g, '/')
+    .replace(/"/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function escapeHeaderValue(value) {
-  return cleanHeaderValue(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 /**
@@ -53,7 +51,7 @@ export function exportRepertoirePgn(lines = []) {
     const separator = serialized.indexOf('\n\n');
     const movetext = (separator >= 0 ? serialized.slice(separator + 2) : serialized).trim();
     const headerBlock = Object.entries(headers)
-      .map(([key, value]) => '[' + key + ' "' + escapeHeaderValue(value) + '"]')
+      .map(([key, value]) => '[' + key + ' "' + cleanHeaderValue(value) + '"]')
       .join('\n');
     return headerBlock + '\n\n' + movetext;
   });
