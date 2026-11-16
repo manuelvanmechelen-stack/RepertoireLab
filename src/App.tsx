@@ -3,6 +3,7 @@ import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, selectDueOwnPly, type LineGrade, type FsrsCardState } from './study/scheduling.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
+import { exportRepertoirePgn } from './study/pgnExport.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
@@ -1653,28 +1654,19 @@ function App() {
       setNotice('Er zijn nog geen varianten om te exporteren.');
       return;
     }
-    const escapeHeader = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
-    const contents = repertoireLines.map((line, index) => {
-      const game = newGame(line.moves);
-      const pgn = game.pgn({ maxWidth: 100 });
-      return [
-        '[Event "' + escapeHeader(line.name) + '"]',
-        '[Site "RepertoireLab"]',
-        '[White "' + (line.color === 'Wit' ? 'Repertoire' : 'Opponent') + '"]',
-        '[Black "' + (line.color === 'Zwart' ? 'Repertoire' : 'Opponent') + '"]',
-        '[Round "' + (index + 1) + '"]',
-        '',
-        pgn || '*',
-      ].join('\n');
-    }).join('\n\n');
-    const blob = new Blob([contents + '\n'], { type: 'application/x-chess-pgn;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = activeRepertoire.name.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() + '.pgn';
-    link.click();
-    URL.revokeObjectURL(url);
-    setNotice('PGN geëxporteerd met ' + repertoireLines.length + ' varianten.');
+    try {
+      const contents = exportRepertoirePgn(repertoireLines);
+      const blob = new Blob([contents], { type: 'application/x-chess-pgn;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = activeRepertoire.name.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() + '.pgn';
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice('PGN geëxporteerd met ' + repertoireLines.length + ' varianten.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'PGN-export is mislukt.');
+    }
   }
 
   function addExplorerMoveToRepertoire(san: string) {
