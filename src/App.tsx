@@ -8,6 +8,7 @@ import { validateBackup } from './study/backup.mjs';
 import { collectKnownContinuationSans, rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
+import { buildRepertoireMoveTree, type RepertoireMoveTreeNode } from './study/repertoireMoveTree.mjs';
 import { analyzeTranspositions } from './study/transpositions.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
@@ -1069,6 +1070,7 @@ function App() {
   const repertoireMetrics = useMemo(() => calculateRepertoireMetrics(lines, moveMemory, Date.now(), engineLineAudits), [lines, moveMemory, engineLineAudits]);
   const repertoireQuality = useMemo(() => calculateRepertoireQuality(repertoireLines, moveMemory, engineLineAudits, coverage), [repertoireLines, moveMemory, engineLineAudits, coverage]);
   const repertoireTree = useMemo(() => buildRepertoireTree(repertoireLines), [repertoireLines]);
+  const repertoireMoveTree = useMemo(() => buildRepertoireMoveTree(repertoireLines), [repertoireLines]);
   const treePositionMoves = getRepertoireContinuations(repertoireTree, game.fen());
   const trainingHealth = useMemo(() => {
     const ownMoves = Object.entries(moveMemory).filter(([key]) => lines.some(line => key.startsWith(line.id + ':')));
@@ -3007,25 +3009,20 @@ function App() {
                         <summary>Gedeelde zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">
                           {(() => {
-                            type TreeNode = { san: string; ply: number; children: TreeNode[]; lineIds: string[] };
-                            const root: TreeNode = { san: '', ply: 0, children: [], lineIds: [] };
-                            for (const line of repertoireLines) {
-                              let parent = root;
-                              const path = newGame(line.moves).history();
-                              path.forEach((san, index) => {
-                                let child = parent.children.find(node => node.san === san);
-                                if (!child) {
-                                  child = { san, ply: index + 1, children: [], lineIds: [] };
-                                  parent.children.push(child);
-                                }
-                                if (!child.lineIds.includes(line.id)) child.lineIds.push(line.id);
-                                parent = child;
-                              });
-                            }
-                            const renderNodes = (nodes: TreeNode[]): React.ReactNode[] => nodes.map(node => {
+                            const transpositionPathCounts = new Map(repertoireTree.nodes.map(node => [node.key, node.pathCount]));
+                            const currentHistory = game.history();
+                            const currentPositionKey = game.fen().split(' ').slice(0, 4).join(' ');
+                            const renderNodes = (nodes: RepertoireMoveTreeNode[], rootKey: string): React.ReactNode[] => nodes.map(node => {
                               const owners = repertoireLines.filter(line => node.lineIds.includes(line.id));
                               const owner = owners.find(line => line.id === active) ?? owners[0];
-                              return <div className={'move-tree-line' + (game.history().length === node.ply && game.history().join(' ') === newGame(owner?.moves).history().slice(0, node.ply).join(' ') ? ' current' : '')} key={node.ply + '-' + node.san}>
+                              const ownerGame = owner ? newGame(owner.moves) : null;
+                              const ownerPrefix = ownerGame ? ownerGame.history().slice(0, node.ply).join(' ') : '';
+                              const isCurrent = !!ownerGame
+                                && currentHistory.length === node.ply
+                                && currentHistory.join(' ') === ownerPrefix
+                                && currentPositionKey === node.positionKey;
+                              const transpositionPaths = transpositionPathCounts.get(node.positionKey) ?? 0;
+                              return <div className={'move-tree-line' + (isCurrent ? ' current' : '')} key={rootKey + '-' + node.ply + '-' + node.san + '-' + node.positionKey}>
                                 <div className="move-tree-moves">
                                   <button className="tree-move" title={owners.map(line => line.name).join(', ')} onClick={() => {
                                     if (!owner) return;
@@ -3033,14 +3030,24 @@ function App() {
                                     while (candidate.history().length > node.ply) candidate.undo();
                                     setActive(owner.id); setGame(candidate); setSelected(null);
                                   }}>
-                                    {node.ply % 2 ? Math.ceil(node.ply / 2) + '. ' : Math.floor(node.ply / 2) + '... '}{node.san}
+                                    {node.color === 'w' ? node.moveNumber + '. ' : node.moveNumber + '... '}{node.san}
                                   </button>
                                   <span className="muted">{owners.length > 1 ? 'gedeeld door ' + owners.length + ' varianten' : owner?.name}</span>
+                                  {transpositionPaths > 1 && <span className="muted">zelfde stelling via {transpositionPaths} zettenreeksen</span>}
                                 </div>
-                                {node.children.length > 0 && <div style={{ marginLeft: 18, borderLeft: '1px solid #ddd', paddingLeft: 10 }}>{renderNodes(node.children)}</div>}
+                                {node.children.length > 0 && <div style={{ marginLeft: 18, borderLeft: '1px solid #ddd', paddingLeft: 10 }}>{renderNodes(node.children, rootKey)}</div>}
                               </div>;
                             });
-                            return renderNodes(root.children);
+                            return repertoireMoveTree.roots.map(root => (
+                              <div className="move-tree-root" key={root.key}>
+                                <div className="muted" style={{ marginBottom: 8 }}>
+                                  <strong>{root.isStandard ? 'Standaard beginstelling' : 'Custom FEN · zet ' + root.moveNumber + ' · ' + (root.turn === 'w' ? 'wit' : 'zwart') + ' aan zet'}</strong>
+                                  {!root.isStandard && <code>{root.fen}</code>}
+                                  <span>{root.lineIds.length} varianten</span>
+                                </div>
+                                {renderNodes(root.moves, root.key)}
+                              </div>
+                            ));
                           })()}
                         </div>
                       </details>

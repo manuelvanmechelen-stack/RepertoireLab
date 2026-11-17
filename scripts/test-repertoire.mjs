@@ -7,6 +7,7 @@ import { validateBackup } from '../src/study/backup.mjs';
 import { collectKnownContinuationSans, rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
+import { buildRepertoireMoveTree } from '../src/study/repertoireMoveTree.mjs';
 import { analyzeTranspositions } from '../src/study/transpositions.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
@@ -207,6 +208,54 @@ check(fianchettoNode, 'transpositiepositie staat als één gedeelde node in de b
 check(fianchettoNode.pathCount >= 2, 'transpositiepositie bewaart beide verschillende zettenvolgordes');
 check(tree.transpositionPositions >= 1, 'boom telt transpositieposities');
 equal(getRepertoireContinuations(tree, 'invalid fen').length, 0, 'onbekende stelling geeft geen repertoirezetten');
+
+// 5c. A shared graph node keeps its shortest relative ply regardless of input order.
+const longTranspositionLine = {
+  id: 'long-route',
+  name: 'Omweg naar Nf3',
+  moves: '1. Na3 Nf6 2. Nb1 Ng8 3. Nf3',
+};
+const shortTranspositionLine = {
+  id: 'short-route',
+  name: 'Direct Nf3',
+  moves: '1. Nf3',
+};
+const repeatedPositionKey = positionKey(gameFromPgn('1. Nf3'));
+const longFirstGraph = buildRepertoireTree([longTranspositionLine, shortTranspositionLine]);
+const shortFirstGraph = buildRepertoireTree([shortTranspositionLine, longTranspositionLine]);
+const longFirstPosition = longFirstGraph.nodes.find(node => node.key === repeatedPositionKey);
+const shortFirstPosition = shortFirstGraph.nodes.find(node => node.key === repeatedPositionKey);
+equal(longFirstPosition?.ply, 1, 'transpositienode gebruikt de kortste zettenafstand, ook als de langere route eerst komt');
+equal(shortFirstPosition?.ply, 1, 'transpositienode blijft dezelfde zettenafstand bij omgekeerde invoervolgorde');
+equal(longFirstPosition?.pathCount, 2, 'transpositie behoudt beide verschillende zettenreeksen');
+
+// 5d. The displayed move tree keeps custom-FEN roots separate and uses PGN fullmove numbers.
+const customMoveTreeFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
+const customMoveTreePgnA = '[Event "Custom start A"]\\n[SetUp "1"]\\n[FEN "' + customMoveTreeFen + '"]\\n\\n12... c5 13. Nf3 *';
+const customMoveTreePgnB = '[Event "Custom start B"]\\n[SetUp "1"]\\n[FEN "' + customMoveTreeFen + '"]\\n\\n12... e5 13. Nf3 *';
+const moveDisplayTree = buildRepertoireMoveTree([
+  { id: 'standard-display', name: 'Standaard', moves: '1. e4 e5 2. Nf3' },
+  { id: 'custom-display-a', name: 'Custom met c5', moves: customMoveTreePgnA },
+  { id: 'custom-display-b', name: 'Custom met e5', moves: customMoveTreePgnB },
+]);
+equal(moveDisplayTree.validLines, 3, 'move tree accepteert standaard- en custom-FEN-varianten');
+equal(moveDisplayTree.invalidLines, 0, 'geldige custom-FEN-varianten worden niet afgewezen');
+equal(moveDisplayTree.roots.length, 2, 'standaard en custom FEN krijgen afzonderlijke boomwortels');
+const standardDisplayRoot = moveDisplayTree.roots.find(root => root.isStandard);
+const customDisplayRoot = moveDisplayTree.roots.find(root => !root.isStandard);
+check(standardDisplayRoot && customDisplayRoot, 'beide startposities blijven afzonderlijk beschikbaar');
+equal(customDisplayRoot?.turn, 'b', 'custom-FEN-wortel bewaart zwart aan zet');
+equal(customDisplayRoot?.moveNumber, 12, 'custom-FEN-wortel bewaart het oorspronkelijke zetnummer');
+equal(customDisplayRoot?.lineIds.length, 2, 'varianten met dezelfde custom-FEN-start delen hun wortel');
+check(customDisplayRoot?.moves.some(move => move.san === 'c5'), 'custom-FEN-wortel bevat de eerste zwarte c5-zet');
+check(customDisplayRoot?.moves.some(move => move.san === 'e5'), 'custom-FEN-wortel behoudt alternatieve eerste zetten');
+const customC5Node = customDisplayRoot?.moves.find(move => move.san === 'c5');
+equal(customC5Node?.color, 'b', 'eerste custom-FEN-zet wordt als zwarte zet getoond');
+equal(customC5Node?.moveNumber, 12, 'eerste zwarte custom-FEN-zet wordt als 12... genummerd');
+const customNf3Node = customC5Node?.children.find(move => move.san === 'Nf3');
+equal(customNf3Node?.color, 'w', 'antwoord na custom-FEN-start wordt als witte zet getoond');
+equal(customNf3Node?.moveNumber, 13, 'witte antwoordzet behoudt zetnummer 13');
+check(standardDisplayRoot?.moves.some(move => move.san === 'e4'), 'standaardbegin blijft een eigen zettenboomwortel');
 
 // 6. PGN collection import semantics: multiple tagged games, metadata, and invalid-game handling.
 const collection = `[Event "Schots - hoofdvariant"]

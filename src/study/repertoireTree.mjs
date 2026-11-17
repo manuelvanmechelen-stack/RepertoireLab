@@ -39,6 +39,8 @@ export function buildRepertoireTree(lines = []) {
           key: beforeKey, fen: cursor.fen(), ply: cursor.history().length,
           incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
+        const beforePly = cursor.history().length;
+        if (beforePly < before.ply) before.ply = beforePly;
         before.pathSignatures.add(`${startKey}|${cursor.history().join(' ')}`);
         nodes.set(beforeKey, before);
         const played = cursor.move(move);
@@ -47,6 +49,8 @@ export function buildRepertoireTree(lines = []) {
           key: afterKey, fen: cursor.fen(), ply: cursor.history().length,
           incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
+        const afterPly = cursor.history().length;
+        if (afterPly < after.ply) after.ply = afterPly;
         after.pathSignatures.add(`${startKey}|${cursor.history().join(' ')}`);
         nodes.set(afterKey, after);
         const existing = before.moves.get(played.san) ?? {
