@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js';
 
 const STANDARD_FEN = new Chess().fen();
-const positionKey = fen => String(fen ?? '').trim().split(/\\s+/).slice(0, 4).join(' ');
+const positionKey = fen => String(fen ?? '').trim().split(/\s+/).slice(0, 4).join(' ');
 
 function addUnique(items, value) {
   if (!items.includes(value)) items.push(value);
@@ -35,7 +35,7 @@ export function buildRepertoireMoveTree(lines = []) {
       const startFen = start.fen();
       let root = roots.get(startFen);
       if (!root) {
-        const fields = startFen.split(/\\s+/);
+        const fields = startFen.split(/\s+/);
         root = {
           key: startFen,
           fen: startFen,
@@ -63,7 +63,7 @@ export function buildRepertoireMoveTree(lines = []) {
           to: move.to,
           promotion: move.promotion ?? null,
           ply: index + 1,
-          moveNumber: Number(move.before.split(/\\s+/)[5]) || 1,
+          moveNumber: Number(move.before.split(/\s+/)[5]) || 1,
           color: move.color,
           positionKey: positionKey(move.after),
           fen: move.after,

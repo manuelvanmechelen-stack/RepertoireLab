@@ -231,8 +231,8 @@ equal(longFirstPosition?.pathCount, 2, 'transpositie behoudt beide verschillende
 
 // 5d. The displayed move tree keeps custom-FEN roots separate and uses PGN fullmove numbers.
 const customMoveTreeFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
-const customMoveTreePgnA = '[Event "Custom start A"]\\n[SetUp "1"]\\n[FEN "' + customMoveTreeFen + '"]\\n\\n12... c5 13. Nf3 *';
-const customMoveTreePgnB = '[Event "Custom start B"]\\n[SetUp "1"]\\n[FEN "' + customMoveTreeFen + '"]\\n\\n12... e5 13. Nf3 *';
+const customMoveTreePgnA = '[Event "Custom start A"]\n[SetUp "1"]\n[FEN "' + customMoveTreeFen + '"]\n\n12... c5 13. Nf3 *';
+const customMoveTreePgnB = '[Event "Custom start B"]\n[SetUp "1"]\n[FEN "' + customMoveTreeFen + '"]\n\n12... e5 13. Nf3 *';
 const moveDisplayTree = buildRepertoireMoveTree([
   { id: 'standard-display', name: 'Standaard', moves: '1. e4 e5 2. Nf3' },
   { id: 'custom-display-a', name: 'Custom met c5', moves: customMoveTreePgnA },
