@@ -56,22 +56,26 @@ export function buildRepertoireMoveTree(lines = []) {
 
       let parent = root;
       history.forEach((move, index) => {
-        const child = parent.moves.find(candidate => candidate.san === move.san) ?? {
-          san: move.san,
-          uci: move.from + move.to + (move.promotion ?? ''),
-          from: move.from,
-          to: move.to,
-          promotion: move.promotion ?? null,
-          ply: index + 1,
-          moveNumber: Number(move.before.split(/\s+/)[5]) || 1,
-          color: move.color,
-          positionKey: positionKey(move.after),
-          fen: move.after,
-          lineIds: [],
-          lineNames: [],
-          children: [],
-        };
-        if (!parent.moves.includes(child)) parent.moves.push(child);
+        const siblings = parent === root ? root.moves : parent.children;
+        let child = siblings.find(candidate => candidate.san === move.san);
+        if (!child) {
+          child = {
+            san: move.san,
+            uci: move.from + move.to + (move.promotion ?? ''),
+            from: move.from,
+            to: move.to,
+            promotion: move.promotion ?? null,
+            ply: index + 1,
+            moveNumber: Number(move.before.split(/\s+/)[5]) || 1,
+            color: move.color,
+            positionKey: positionKey(move.after),
+            fen: move.after,
+            lineIds: [],
+            lineNames: [],
+            children: [],
+          };
+          siblings.push(child);
+        }
         addUnique(child.lineIds, lineId);
         addUnique(child.lineNames, lineName);
         parent = child;
