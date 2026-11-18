@@ -451,7 +451,7 @@ check(transpositionReview.summary.includes('transpositie herkend'), 'review beno
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
 // 10a. Read Event metadata from parsed headers so comment text cannot masquerade as a tag.
-const namedEventGame = gameFromPgn('[Event "Club Open"]\\n\\n1. e4 e5 *');
+const namedEventGame = gameFromPgn('[Event "Club Open"]\n\n1. e4 e5 *');
 equal(getPgnEventName(namedEventGame.header()), 'Club Open', 'PGN-import behoudt de echte Event-naam');
 const commentOnlyEventGame = gameFromPgn('1. e4 {source note [Event "not a real game"]} e5 *');
 equal(getPgnEventName(commentOnlyEventGame.header()), null, 'PGN-import negeert Event-achtige tekst in een commentaar');
