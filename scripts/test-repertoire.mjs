@@ -450,12 +450,12 @@ equal(transpositionReview.transpositionCount, 3, 'review registreert de halve ze
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
 
-// 10a. Parsed PGN Event headers must be used instead of a quote-fragile regex.
-const escapedEventPgn = '[Event "Team \\"A\\""]\n\n1. e4 e5 *';
-const escapedEventGame = gameFromPgn(escapedEventPgn);
-equal(getPgnEventName(escapedEventGame.header()), 'Team "A"', 'PGN-import behoudt aanhalingstekens in een Event-naam');
-equal(getPgnEventName(gameFromPgn('[Event "?"]\n\n1. e4 *').header()), null, 'PGN-import gebruikt geen vraagteken als Event-naam');
-equal(getPgnEventName(gameFromPgn('1. e4 *').header()), null, 'PGN-import gebruikt een fallback als de Event-header ontbreekt');
+// 10a. Read Event metadata from parsed headers so comment text cannot masquerade as a tag.
+const namedEventGame = gameFromPgn('[Event "Club Open"]\\n\\n1. e4 e5 *');
+equal(getPgnEventName(namedEventGame.header()), 'Club Open', 'PGN-import behoudt de echte Event-naam');
+const commentOnlyEventGame = gameFromPgn('1. e4 {source note [Event "not a real game"]} e5 *');
+equal(getPgnEventName(commentOnlyEventGame.header()), null, 'PGN-import negeert Event-achtige tekst in een commentaar');
+equal(getPgnEventName({ Event: '?' }), null, 'PGN-import gebruikt geen vraagteken als Event-naam');
 
 // 10b. PGN collection boundaries must ignore result-like text in comments and variations.
 const braceCommentCollection = [
