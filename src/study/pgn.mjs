@@ -99,3 +99,10 @@ export function splitPgnCollection(input) {
   if (current.some(line => line.trim())) chunks.push(current.join("\n").trim());
   return chunks.filter(Boolean);
 }
+
+
+/** Return a usable Event label from parsed PGN headers. */
+export function getPgnEventName(headers = {}) {
+  const event = typeof headers?.Event === "string" ? headers.Event.trim() : "";
+  return event && event !== "?" ? event : null;
+}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
-import { splitPgnCollection } from '../src/study/pgn.mjs';
+import { getPgnEventName, splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
@@ -449,6 +449,13 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+// 10a. Parsed PGN Event headers must be used instead of a quote-fragile regex.
+const escapedEventPgn = '[Event "Team \\"A\\""]\n\n1. e4 e5 *';
+const escapedEventGame = gameFromPgn(escapedEventPgn);
+equal(getPgnEventName(escapedEventGame.header()), 'Team "A"', 'PGN-import behoudt aanhalingstekens in een Event-naam');
+equal(getPgnEventName(gameFromPgn('[Event "?"]\n\n1. e4 *').header()), null, 'PGN-import gebruikt geen vraagteken als Event-naam');
+equal(getPgnEventName(gameFromPgn('1. e4 *').header()), null, 'PGN-import gebruikt een fallback als de Event-header ontbreekt');
 
 // 10b. PGN collection boundaries must ignore result-like text in comments and variations.
 const braceCommentCollection = [

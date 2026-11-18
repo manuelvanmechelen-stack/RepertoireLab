@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, selectDueOwnPly, type LineGrade, type FsrsCardState } from './study/scheduling.mjs';
-import { splitPgnCollection } from './study/pgn.mjs';
+import { getPgnEventName, splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
@@ -1869,11 +1869,11 @@ function App() {
         const signature = candidate.history().join(' ');
         if (existingSignatures.has(signature)) { duplicateCount++; continue; }
         existingSignatures.add(signature);
-        const eventName = chunks[index].match(/\[Event\s+"([^"]+)"/)?.[1];
+        const eventName = getPgnEventName(candidate.header());
         imported.push({
           id: crypto.randomUUID(),
           repertoireId: activeRepertoire.id,
-          name: eventName && eventName !== '?' ? eventName : (chunks.length > 1 ? 'Geïmporteerde variant ' + (index + 1) : 'Geïmporteerde variant'),
+          name: eventName ?? (chunks.length > 1 ? 'Geïmporteerde variant ' + (index + 1) : 'Geïmporteerde variant'),
           color: pgnColor,
           moves: candidate.pgn(),
           tags: ['PGN-import'],
