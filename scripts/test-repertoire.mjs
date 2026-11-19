@@ -4,7 +4,7 @@ import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrs
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
-import { validateCloudBackupPayload } from '../src/study/cloudBackup.mjs';
+import { syncCloudBackup, validateCloudBackupPayload } from '../src/study/cloudBackup.mjs';
 import { revokeSupabaseSession } from '../src/study/supabaseAuth.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
@@ -17,6 +17,7 @@ let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
 function equal(actual, expected, message) { assert.equal(actual, expected, message); checks++; }
 function throws(fn, message) { assert.throws(fn, undefined, message); checks++; }
+async function rejects(fn, message) { await assert.rejects(fn, undefined, message); checks++; }
 function gameFromPgn(pgn) { const game = new Chess(); game.loadPgn(pgn); return game; }
 function play(game, san, label = san) { const result = game.move(san); check(result, 'Zet moet legaal zijn: ' + label); return result; }
 function positionKey(game) { return game.fen().split(' ').slice(0, 4).join(' '); }
@@ -507,6 +508,106 @@ throws(() => validateCloudBackupPayload({ ...validCloudPayload, app: 'OtherApp' 
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [{ ...backup.lines[0], moves: '1. e4 Qh9' }] }), 'cloud weigert een ongeldige variant vóór upload');
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, lines: [backup.lines[0], { ...backup.lines[0], name: 'Dubbele variant' }] }), 'cloud weigert dubbele variant-ID’s vóór upload');
 throws(() => validateCloudBackupPayload({ ...validCloudPayload, moveMemory: { 'line-1:0': { seen: -1, misses: 0, due: fixedNow, intervalDays: 0 } } }), 'cloud weigert ongeldige spaced-repetition-data vóór upload');
+
+
+
+const cloudTimestampA = new Date(fixedNow).toISOString();
+const cloudTimestampB = new Date(fixedNow + 1000).toISOString();
+const firstSyncRequests = [];
+const firstCloudSync = await syncCloudBackup({
+  payload: validCloudPayload,
+  userId: 'user-1',
+  request: async (path, init = {}, token) => {
+    firstSyncRequests.push({ path, init, token });
+    if (path.includes('select=updated_at')) return [];
+    if (init.method === 'POST') return [{ updated_at: cloudTimestampA }];
+    throw new Error('Unexpected cloud request');
+  },
+  token: 'access-token',
+  now: () => cloudTimestampA,
+});
+equal(firstCloudSync.created, true, 'eerste cloudsync maakt alleen een nog niet bestaande cloudkopie aan');
+equal(firstCloudSync.updatedAt, cloudTimestampA, 'eerste cloudsync bewaart de server-versiemarkering');
+equal(firstSyncRequests.length, 2, 'eerste cloudsync controleert eerst of er al een cloudkopie bestaat');
+equal(firstSyncRequests[1].init.headers.Prefer, 'resolution=ignore-duplicates,return=representation', 'eerste cloudsync weigert een gelijktijdige dubbele insert');
+equal(firstSyncRequests[1].token, 'access-token', 'cloudversiecontrole en insert gebruiken dezelfde geauthenticeerde sessie');
+
+let existingCloudReads = 0;
+await rejects(() => syncCloudBackup({
+  payload: validCloudPayload,
+  userId: 'user-1',
+  request: async () => { existingCloudReads++; return [{ updated_at: cloudTimestampA }]; },
+  now: () => cloudTimestampB,
+}), 'bestaande cloudkopie kan niet zonder voorafgaand herstel worden overschreven');
+equal(existingCloudReads, 1, 'onbekende cloudversie wordt na alleen-lezen controle geblokkeerd');
+
+const updateRequests = [];
+const updatedCloudSync = await syncCloudBackup({
+  payload: validCloudPayload,
+  userId: 'user-1',
+  expectedUpdatedAt: cloudTimestampA,
+  request: async (path, init = {}) => {
+    updateRequests.push({ path, init });
+    if (path.includes('select=updated_at')) return [{ updated_at: cloudTimestampA }];
+    if (init.method === 'PATCH') return [{ updated_at: cloudTimestampB }];
+    throw new Error('Unexpected cloud request');
+  },
+  now: () => cloudTimestampB,
+});
+equal(updatedCloudSync.created, false, 'bestaande cloudkopie wordt als update herkend');
+equal(updatedCloudSync.updatedAt, cloudTimestampB, 'succesvolle update levert de nieuwe cloudversie terug');
+equal(updateRequests[1].init.method, 'PATCH', 'bestaande cloudkopie wordt conditioneel bijgewerkt');
+check(updateRequests[1].path.includes('updated_at=eq.' + encodeURIComponent(cloudTimestampA)), 'cloudupdate vergelijkt de exacte eerder herstelde tijdstempel');
+equal(updateRequests[1].init.headers.Prefer, 'return=representation', 'cloudupdate vraagt de opgeslagen versiemarkering terug');
+
+let stalePatchCalls = 0;
+await rejects(() => syncCloudBackup({
+  payload: validCloudPayload,
+  userId: 'user-1',
+  expectedUpdatedAt: cloudTimestampA,
+  request: async (path, init = {}) => {
+    if (path.includes('select=updated_at')) return [{ updated_at: cloudTimestampB }];
+    if (init.method === 'PATCH') stalePatchCalls++;
+    return [];
+  },
+  now: () => new Date(fixedNow + 2000).toISOString(),
+}), 'een cloudkopie die op een ander apparaat is gewijzigd wordt niet overschreven');
+equal(stalePatchCalls, 0, 'verouderde lokale versie wordt vóór de update geblokkeerd');
+
+let lostRacePatchCalls = 0;
+await rejects(() => syncCloudBackup({
+  payload: validCloudPayload,
+  userId: 'user-1',
+  expectedUpdatedAt: cloudTimestampA,
+  request: async (path, init = {}) => {
+    if (path.includes('select=updated_at')) return [{ updated_at: cloudTimestampA }];
+    if (init.method === 'PATCH') { lostRacePatchCalls++; return []; }
+    return [];
+  },
+  now: () => cloudTimestampB,
+}), 'een gelijktijdige wijziging tussen lezen en schrijven wordt als conflict gemeld');
+equal(lostRacePatchCalls, 1, 'conditionele update wordt uitgevoerd om de race te sluiten');
+
+await rejects(() => syncCloudBackup({
+  payload: validCloudPayload,
+  userId: 'user-1',
+  expectedUpdatedAt: cloudTimestampA,
+  request: async () => [],
+  now: () => cloudTimestampB,
+}), 'verwijderde cloudkopie wordt niet stilzwijgend opnieuw aangemaakt');
+
+let duplicateInsertAttempted = false;
+await rejects(() => syncCloudBackup({
+  payload: validCloudPayload,
+  userId: 'user-1',
+  request: async (path, init = {}) => {
+    if (path.includes('select=updated_at')) return [];
+    if (init.method === 'POST') { duplicateInsertAttempted = true; return []; }
+    return [];
+  },
+  now: () => cloudTimestampA,
+}), 'gelijktijdig aangemaakte cloudkopie wordt niet als succesvolle eerste sync gemeld');
+check(duplicateInsertAttempted, 'eerste sync gebruikt een duplicate-safe insert');
 
 
 // 14. Supabase sign-out revokes only the current refresh-token session.
