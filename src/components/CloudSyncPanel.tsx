@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { validateCloudBackupPayload } from '../study/cloudBackup.mjs';
+import { syncCloudBackup, validateCloudBackupPayload } from '../study/cloudBackup.mjs';
 import { revokeSupabaseSession } from '../study/supabaseAuth.mjs';
 
 type Backup = {
@@ -35,6 +35,7 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [cloudVersion, setCloudVersion] = useState<{ userId: string; updatedAt: string } | null>(null);
   const configured = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
   async function request(path: string, init: RequestInit = {}, token?: string) {
@@ -55,6 +56,7 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
       if (response.status === 401) {
         sessionStorage.removeItem(SESSION_KEY);
         setSession(null);
+        setCloudVersion(null);
       }
       throw new Error(data?.msg || data?.message || data?.error_description || data?.error || 'Cloudrequest mislukt (' + response.status + ').');
     }
@@ -73,7 +75,7 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
       }
       const next: Session = { access_token: data.access_token, refresh_token: data.refresh_token, expires_at: Date.now() + Number(data.expires_in || 3600) * 1000, user: data.user };
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
-      setSession(next); setPassword('');
+      setSession(next); setPassword(''); setCloudVersion(null);
       setMessage(mode === 'signup' ? 'Account aangemaakt en ingelogd.' : 'Ingelogd. Je kunt nu synchroniseren.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Inloggen mislukt.'); }
     finally { setBusy(false); }
@@ -89,6 +91,7 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
       typeof refreshed?.user?.id !== 'string' || refreshed.user.id !== session.user.id) {
       sessionStorage.removeItem(SESSION_KEY);
       setSession(null);
+      setCloudVersion(null);
       throw new Error('De cloudsessie kon niet veilig worden vernieuwd. Log opnieuw in.');
     }
     const next: Session = {
@@ -106,16 +109,17 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
     setBusy(true); setMessage('');
     try {
       const token = await getToken();
-      const serialized = JSON.stringify(backup);
-      if (serialized.length > 8_000_000) throw new Error('Deze back-up is groter dan 8 MB. Exporteer hem lokaal en verklein de inhoud voordat je synchroniseert.');
-      const validated = JSON.parse(serialized) as Backup;
-      validateCloudBackupPayload(validated);
-      await request('/rest/v1/repertoirelab_backups?on_conflict=user_id', {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ user_id: session!.user.id, payload: validated, updated_at: new Date().toISOString() }),
-      }, token);
-      setMessage('Back-up veilig naar je cloudaccount gesynchroniseerd.');
+      const result = await syncCloudBackup({
+        payload: backup,
+        userId: session!.user.id,
+        expectedUpdatedAt: cloudVersion?.userId === session!.user.id ? cloudVersion.updatedAt : null,
+        request,
+        token,
+      });
+      setCloudVersion({ userId: session!.user.id, updatedAt: result.updatedAt });
+      setMessage(result.created
+        ? 'Eerste cloudback-up aangemaakt.'
+        : 'Cloudback-up veilig bijgewerkt.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Synchroniseren mislukt.'); }
     finally { setBusy(false); }
   }
@@ -127,9 +131,14 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
       const token = await getToken();
       const rows = await request('/rest/v1/repertoirelab_backups?select=payload,updated_at&user_id=eq.' + encodeURIComponent(session!.user.id) + '&limit=1', {}, token);
       if (!Array.isArray(rows) || !rows[0]?.payload) throw new Error('Er staat nog geen back-up in de cloud. Synchroniseer dit apparaat eerst.');
+      const updatedAt = rows[0].updated_at;
+      if (typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt))) {
+        throw new Error('De cloudback-up heeft geen geldige versiemarkering. Je lokale gegevens zijn niet gewijzigd.');
+      }
       const payload = validateCloudBackupPayload(rows[0].payload) as Partial<Backup>;
       await onRestore(payload);
-      setMessage('Cloudback-up geladen. Laatste cloudupdate: ' + (rows[0].updated_at ? new Date(rows[0].updated_at).toLocaleString() : 'onbekend') + '.');
+      setCloudVersion({ userId: session!.user.id, updatedAt });
+      setMessage('Cloudback-up geladen. Laatste cloudupdate: ' + new Date(updatedAt).toLocaleString() + '.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Herstellen uit cloud mislukt.'); }
     finally { setBusy(false); }
   }
@@ -150,6 +159,7 @@ export function CloudSyncPanel({ backup, onRestore }: { backup: Backup; onRestor
 
     try { sessionStorage.removeItem(SESSION_KEY); } catch { /* private browsing may block session storage */ }
     setSession(null);
+    setCloudVersion(null);
     setPassword('');
 
     let revocation: { ok: boolean; status: number | null } = { ok: false, status: null };
