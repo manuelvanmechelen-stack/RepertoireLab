@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { rankBookBuilderCandidates } from './bookbuilder/MoveRanking';
 import { scheduleFsrsMoveResult, scheduleLineResult, scheduleFsrsLineGrade, selectDueOwnPly, type LineGrade, type FsrsCardState } from './study/scheduling.mjs';
+import { loadTrainingLine, isOwnTrainingPly } from './study/trainingBoard.mjs';
 import { splitPgnCollection } from './study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from './study/gameReview.mjs';
 import { validateBackup } from './study/backup.mjs';
-import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
+import { collectKnownContinuationSans, rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
+import { buildRepertoireMoveTree, type RepertoireMoveTreeNode } from './study/repertoireMoveTree.mjs';
+import { analyzeTranspositions } from './study/transpositions.mjs';
 import { rankTrainingLines } from './study/trainingPriority.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
 import { evaluationLossCp } from './study/engineAudit.mjs';
@@ -839,6 +842,18 @@ function newGame(moves?: string) {
   return game;
 }
 
+// Duplicate detection must include the starting position as well as the SAN path.
+// Identical SAN sequences from a custom FEN are not the same repertoire line.
+function movePathSignature(game: Chess) {
+  const headers = game.getHeaders();
+  const startFen = headers.FEN ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  return startFen + '|' + game.history().join(' ');
+}
+
+function signatureFromPgn(pgn: string) {
+  return movePathSignature(newGame(pgn));
+}
+
 // Clone the complete move history, not just the current FEN. Loading only FEN
 // discards earlier moves and makes saved variants/undo contain only the last move.
 function cloneGame(source: Chess) {
@@ -849,24 +864,6 @@ function cloneGame(source: Chess) {
   }
   copy.load(source.fen());
   return copy;
-}
-function positionSignature(game: Chess) { return game.fen().split(' ').slice(0, 4).join(' '); }
-function analyzeTranspositions(lines: Line[]) {
-  const positions = new Map<string, { histories: Set<string>; names: Set<string>; ply: number }>();
-  for (const line of lines) {
-    try {
-      const game = new Chess(); const history: string[] = [];
-      for (const move of newGame(line.moves).history({ verbose: true })) {
-        game.move(move.san); history.push(move.san);
-        const key = positionSignature(game);
-        const item = positions.get(key) ?? { histories: new Set<string>(), names: new Set<string>(), ply: history.length };
-        item.histories.add(history.join(' ')); item.names.add(line.name); item.ply = Math.min(item.ply, history.length); positions.set(key, item);
-      }
-    } catch { /* skip invalid legacy PGNs */ }
-  }
-  return [...positions.entries()].filter(([, item]) => item.histories.size > 1)
-    .map(([fen, item]) => ({ fen, paths: item.histories.size, names: [...item.names], ply: item.ply }))
-    .sort((a, b) => b.names.length - a.names.length || a.ply - b.ply).slice(0, 20);
 }
 function parseStrictPgn(pgn: string): Chess {
   const game = new Chess();
@@ -1074,6 +1071,7 @@ function App() {
   const repertoireMetrics = useMemo(() => calculateRepertoireMetrics(lines, moveMemory, Date.now(), engineLineAudits), [lines, moveMemory, engineLineAudits]);
   const repertoireQuality = useMemo(() => calculateRepertoireQuality(repertoireLines, moveMemory, engineLineAudits, coverage), [repertoireLines, moveMemory, engineLineAudits, coverage]);
   const repertoireTree = useMemo(() => buildRepertoireTree(repertoireLines), [repertoireLines]);
+  const repertoireMoveTree = useMemo(() => buildRepertoireMoveTree(repertoireLines), [repertoireLines]);
   const treePositionMoves = getRepertoireContinuations(repertoireTree, game.fen());
   const trainingHealth = useMemo(() => {
     const ownMoves = Object.entries(moveMemory).filter(([key]) => lines.some(line => key.startsWith(line.id + ':')));
@@ -1689,7 +1687,7 @@ function App() {
       setNotice('Deze zet is niet legaal in de huidige stelling.');
       return;
     }
-    const signature = candidate.history().join(' ');
+    const signature = movePathSignature(candidate);
     const duplicate = repertoireLines.find(line => {
       try { return newGame(line.moves).history().join(' ') === signature; } catch { return false; }
     });
@@ -1734,6 +1732,21 @@ function App() {
     if (!history.length) { setNotice('Speel eerst minstens één zet voordat je een variant opslaat.'); return; }
     if (!activeRepertoire) { setNotice('Maak eerst een repertoire aan.'); return; }
     if (!branchName.trim()) { setNotice('Geef de nieuwe variant eerst een naam.'); return; }
+
+    // Chessbook-style repertoire trees should not accumulate duplicate full move paths.
+    const movePath = movePathSignature(game);
+    const duplicate = repertoireLines.find(line => {
+      try { return signatureFromPgn(line.moves) === movePathSignature(game); }
+      catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setBranchName('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
+
     const branch: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
@@ -1807,6 +1820,20 @@ function App() {
       setNotice('De variant moet minstens één zet bevatten.');
       return;
     }
+    // Use the same exact-path rule for manual PGN entry and board-created variants.
+    const signature = movePathSignature(candidate);
+    const duplicate = repertoireLines.find(line => {
+      try { return signatureFromPgn(line.moves) === signature; } catch { return false; }
+    });
+    if (duplicate) {
+      setActive(duplicate.id);
+      setGame(newGame(duplicate.moves));
+      setShowAdd(false);
+      setNewName('');
+      setNewNote('');
+      setNotice('Deze zetten bestaan al als variant: ' + duplicate.name + '. Geen duplicaat aangemaakt.');
+      return;
+    }
     const line: Line = {
       id: crypto.randomUUID(),
       repertoireId: activeRepertoire.id,
@@ -1858,7 +1885,7 @@ function App() {
     const existingSignatures = new Set(lines
       .filter(line => line.repertoireId === activeRepertoire.id)
       .flatMap(line => {
-        try { return [newGame(line.moves).history().join(' ')]; } catch { return []; }
+        try { return [signatureFromPgn(line.moves)]; } catch { return []; }
       }));
     let duplicateCount = 0;
     for (let index = 0; index < chunks.length; index++) {
@@ -1866,7 +1893,7 @@ function App() {
       try {
         candidate.loadPgn(chunks[index]);
         if (!candidate.history().length) continue;
-        const signature = candidate.history().join(' ');
+        const signature = movePathSignature(candidate);
         if (existingSignatures.has(signature)) { duplicateCount++; continue; }
         existingSignatures.add(signature);
         const eventName = chunks[index].match(/\[Event\s+"([^"]+)"/)?.[1];
@@ -1944,7 +1971,7 @@ function App() {
   function submitTrainingMove() {
     if (!review) return;
     let expected: string[];
-    try { expected = newGame(review.moves).history(); } catch { setTrainingFeedback('Deze variant bevat zetten die niet goed kunnen worden ingelezen.'); return; }
+    try { expected = loadTrainingLine(review.moves).san; } catch { setTrainingFeedback('Deze variant bevat zetten die niet goed kunnen worden ingelezen.'); return; }
     if (trainingPly >= expected.length) { setTrainingComplete(true); return; }
     const input = trainingInput.trim().replace(/[!?+#]+/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
     const answer = expected[trainingPly].replace(/[!?+#]+/g, '');
@@ -1961,15 +1988,16 @@ function App() {
       setTrainingFeedback('Niet goed. Probeer opnieuw; denk aan de ontwikkelingszet en de dreiging in deze stelling.');
     }
   }
-  function isOwnTrainingPly(ply: number, color: 'Wit' | 'Zwart') { return color === 'Wit' ? ply % 2 === 0 : ply % 2 === 1; }
   function prepareBoardTraining(line: Line | null = review) {
     if (!line) return;
     try {
-      const san = newGame(line.moves).history(); const replay = new Chess(); let ply = 0;
+      const trainingLine = loadTrainingLine(line.moves);
+      const { san, startFen, startTurn } = trainingLine;
+      const replay = new Chess(startFen); let ply = 0;
       // Start at the earliest due move when the whole line is not yet due.
-      const startAt = selectDueOwnPly(san.length, line.color, moveMemory, line.id, line.due, Date.now());
+      const startAt = selectDueOwnPly(san.length, line.color, moveMemory, line.id, line.due, Date.now(), startTurn);
       while (ply < startAt) { replay.move(san[ply]); ply++; }
-      while (ply < san.length && !isOwnTrainingPly(ply, line.color)) { replay.move(san[ply]); ply++; }
+      while (ply < san.length && !isOwnTrainingPly(ply, line.color, startTurn)) { replay.move(san[ply]); ply++; }
       setTrainingPly(ply); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingInput(''); setTrainingEval(null); setTrainingEvalError('');
       setTrainingFeedback(ply >= san.length ? 'Geen eigen zetten meer in deze variant.' : (startAt > 0 ? 'Herhaling vanaf een individuele zet die aan de beurt is.' : 'Speel je volgende repertoirezet op het bord.'));
       setTrainingComplete(ply >= san.length);
@@ -1987,7 +2015,8 @@ function App() {
     const currentBoard = trainingBoardFen === 'start' ? new Chess() : new Chess(trainingBoardFen); const piece = currentBoard.get(square);
     if (!trainingSelected) { if (piece && piece.color === currentBoard.turn()) setTrainingSelected(square); return; }
     try {
-      const expected = newGame(review.moves).history();
+      const trainingLine = loadTrainingLine(review.moves);
+      const expected = trainingLine.san;
       const expectedSan = expected[trainingPly] ?? '';
       // Match underpromotions when the repertoire explicitly calls for one.
       const promotion = expectedSan.match(/=([QRBN])/i)?.[1].toLowerCase() ?? 'q';
@@ -2001,7 +2030,7 @@ function App() {
       }
       setMoveMemory(prev => ({ ...prev, [key]: scheduleFsrsMoveResult(prev[key], true) }));
       let next = trainingPly + 1; const replay = new Chess(currentBoard.fen());
-      while (next < expected.length && !isOwnTrainingPly(next, review.color)) { replay.move(expected[next]); next++; }
+      while (next < expected.length && !isOwnTrainingPly(next, review.color, trainingLine.startTurn)) { replay.move(expected[next]); next++; }
       setTrainingPly(next); setTrainingBoardFen(replay.fen()); setTrainingSelected(null); setTrainingFeedback(next >= expected.length ? 'Variant voltooid. Beoordeel nu hoe goed je de variant kende.' : 'Correct: ' + played.san + '. ' + (next > trainingPly + 1 ? 'Tegenzet automatisch afgespeeld. ' : '') + 'Speel de volgende repertoirezet.');
       if (next >= expected.length) { setTrainingComplete(true); setRevealed(true); }
     } catch { setTrainingSelected(null); }
@@ -2781,20 +2810,9 @@ function App() {
                       let coverageDetails: ReturnType<typeof summarizeCoverageMoves> | null = null;
                       if (!result.error && result.suggestions?.length) {
                         try {
-                          const targetKey = newGame(line.moves).fen().split(' ').slice(0, 4).join(' ');
-                          const knownNextMoves = new Set<string>();
-                          for (const candidateLine of repertoireLines) {
-                            try {
-                              const replay = newGame(candidateLine.moves);
-                              const history = replay.history({ verbose: true });
-                              const cursor = new Chess();
-                              for (const move of history) {
-                                if (cursor.fen().split(' ').slice(0, 4).join(' ') === targetKey) knownNextMoves.add(move.san.replace(/[!?+#]+/g, ''));
-                                cursor.move(move);
-                              }
-                            } catch { /* Ignore malformed legacy lines. */ }
-                          }
-                          coverageDetails = summarizeCoverageMoves(result.suggestions, [...knownNextMoves], 20);
+                          const targetFen = newGame(line.moves).fen();
+                          const knownNextMoves = collectKnownContinuationSans(repertoireLines, targetFen);
+                          coverageDetails = summarizeCoverageMoves(result.suggestions, knownNextMoves, 20);
                         } catch { /* Keep frequency/depth results if a legacy line cannot be replayed. */ }
                       }
                       return (
@@ -2962,29 +2980,52 @@ function App() {
                         <button className="primary" onClick={saveCurrentBranch}>{repertoireLines.length ? 'Variant opslaan' : 'Eerste variant opslaan'}</button>
                         <button className="secondary" disabled={!repertoireLines.length} onClick={replaceCurrentLine}>Variant bijwerken</button>
                       </div>
+                      {activeRepertoire && (
+                        <section className="coverage-summary" aria-label="Vervolgzetten uit repertoire">
+                          <strong>Vervolgzetten vanuit deze stelling</strong>
+                          <p className="muted">Kies een zet om de bestaande repertoiretak vanaf de huidige bordstelling te volgen. De zet wordt op het bord gespeeld; sla daarna op als nieuwe variant als je een nieuwe tak wilt bewaren.</p>
+                          {treePositionMoves.length ? (
+                            <div className="move-entry-actions">
+                              {treePositionMoves.map(move => (
+                                <button className="secondary" key={move.uci + '-' + move.san} title={'Gebruikt in: ' + move.lineNames.join(', ')} onClick={() => {
+                                  const candidate = cloneGame(game);
+                                  try {
+                                    candidate.move(move.san);
+                                    setGame(candidate);
+                                    setSelected(null);
+                                    setNotice('Repertoirezet ' + move.san + ' gespeeld. Opgeslagen in ' + move.lineNames.length + ' bestaande variant(en).');
+                                  } catch {
+                                    setNotice('Deze vervolgzet kon niet vanaf de huidige stelling worden gespeeld.');
+                                  }
+                                }}>
+                                  {move.san} <span className="muted">({move.lineIds.length})</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="muted">Geen bestaande vervolgzetten vanaf deze stelling. Speel een zet om een nieuwe vertakking te maken.</p>
+                          )}
+                          <div className="muted">Repertoire: {repertoireTree.positionCount} stellingen · {repertoireTree.branchingPositions} vertakkingspunten · {repertoireTree.transpositionPositions} transpositieposities</div>
+                        </section>
+                      )}
                       <details className="move-tree-details" open>
                         <summary>Gedeelde zettenboom ({repertoireLines.length} varianten)</summary>
                         <div className="move-tree-list">
                           {(() => {
-                            type TreeNode = { san: string; ply: number; children: TreeNode[]; lineIds: string[] };
-                            const root: TreeNode = { san: '', ply: 0, children: [], lineIds: [] };
-                            for (const line of repertoireLines) {
-                              let parent = root;
-                              const path = newGame(line.moves).history();
-                              path.forEach((san, index) => {
-                                let child = parent.children.find(node => node.san === san);
-                                if (!child) {
-                                  child = { san, ply: index + 1, children: [], lineIds: [] };
-                                  parent.children.push(child);
-                                }
-                                if (!child.lineIds.includes(line.id)) child.lineIds.push(line.id);
-                                parent = child;
-                              });
-                            }
-                            const renderNodes = (nodes: TreeNode[]): React.ReactNode[] => nodes.map(node => {
+                            const transpositionPathCounts = new Map(repertoireTree.nodes.map(node => [node.key, node.pathCount]));
+                            const currentHistory = game.history();
+                            const currentPositionKey = game.fen().split(' ').slice(0, 4).join(' ');
+                            const renderNodes = (nodes: RepertoireMoveTreeNode[], rootKey: string): React.ReactNode[] => nodes.map(node => {
                               const owners = repertoireLines.filter(line => node.lineIds.includes(line.id));
                               const owner = owners.find(line => line.id === active) ?? owners[0];
-                              return <div className={'move-tree-line' + (game.history().length === node.ply && game.history().join(' ') === newGame(owner?.moves).history().slice(0, node.ply).join(' ') ? ' current' : '')} key={node.ply + '-' + node.san}>
+                              const ownerGame = owner ? newGame(owner.moves) : null;
+                              const ownerPrefix = ownerGame ? ownerGame.history().slice(0, node.ply).join(' ') : '';
+                              const isCurrent = !!ownerGame
+                                && currentHistory.length === node.ply
+                                && currentHistory.join(' ') === ownerPrefix
+                                && currentPositionKey === node.positionKey;
+                              const transpositionPaths = transpositionPathCounts.get(node.positionKey) ?? 0;
+                              return <div className={'move-tree-line' + (isCurrent ? ' current' : '')} key={rootKey + '-' + node.ply + '-' + node.san + '-' + node.positionKey}>
                                 <div className="move-tree-moves">
                                   <button className="tree-move" title={owners.map(line => line.name).join(', ')} onClick={() => {
                                     if (!owner) return;
@@ -2992,14 +3033,24 @@ function App() {
                                     while (candidate.history().length > node.ply) candidate.undo();
                                     setActive(owner.id); setGame(candidate); setSelected(null);
                                   }}>
-                                    {node.ply % 2 ? Math.ceil(node.ply / 2) + '. ' : Math.floor(node.ply / 2) + '... '}{node.san}
+                                    {node.color === 'w' ? node.moveNumber + '. ' : node.moveNumber + '... '}{node.san}
                                   </button>
                                   <span className="muted">{owners.length > 1 ? 'gedeeld door ' + owners.length + ' varianten' : owner?.name}</span>
+                                  {transpositionPaths > 1 && <span className="muted">zelfde stelling via {transpositionPaths} zettenreeksen</span>}
                                 </div>
-                                {node.children.length > 0 && <div style={{ marginLeft: 18, borderLeft: '1px solid #ddd', paddingLeft: 10 }}>{renderNodes(node.children)}</div>}
+                                {node.children.length > 0 && <div style={{ marginLeft: 18, borderLeft: '1px solid #ddd', paddingLeft: 10 }}>{renderNodes(node.children, rootKey)}</div>}
                               </div>;
                             });
-                            return renderNodes(root.children);
+                            return repertoireMoveTree.roots.map(root => (
+                              <div className="move-tree-root" key={root.key}>
+                                <div className="muted" style={{ marginBottom: 8 }}>
+                                  <strong>{root.isStandard ? 'Standaard beginstelling' : 'Custom FEN · zet ' + root.moveNumber + ' · ' + (root.turn === 'w' ? 'wit' : 'zwart') + ' aan zet'}</strong>
+                                  {!root.isStandard && <code>{root.fen}</code>}
+                                  <span>{root.lineIds.length} varianten</span>
+                                </div>
+                                {renderNodes(root.moves, root.key)}
+                              </div>
+                            ));
                           })()}
                         </div>
                       </details>

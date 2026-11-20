@@ -2,3 +2,5 @@ export type CoverageMove = { san: string; uci: string; white?: number; draws?: n
 export function rankCoverageMoves(moves: unknown, minGames?: number, limit?: number): CoverageMove[];
 export type CoverageSummary = { totalGames: number; coveredGames: number; weightedCoverage: number | null; missingMoves: CoverageMove[]; observedMoves: number; coveredMoves: number };
 export function summarizeCoverageMoves(moves: unknown, knownSans?: string[], minGames?: number): CoverageSummary;
+
+export function collectKnownContinuationSans(lines: unknown, targetFen: string): string[];

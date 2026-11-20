@@ -28,11 +28,13 @@ export function isDue(due, now = Date.now()) {
   return !Number.isFinite(due) || due <= 0 || due <= now;
 }
 
-export function selectDueOwnPly(historyLength, color, moveMemory, lineId, lineDue, now = Date.now()) {
+export function selectDueOwnPly(historyLength, color, moveMemory, lineId, lineDue, now = Date.now(), startingTurn = 'w') {
   if (isDue(lineDue, now)) return 0;
+  const firstTurn = startingTurn === 'b' ? 'b' : 'w';
+  const ownColor = color === 'Wit' ? 'w' : 'b';
   for (let ply = 0; ply < historyLength; ply++) {
-    const isOwnMove = color === 'Wit' ? ply % 2 === 0 : ply % 2 === 1;
-    if (isOwnMove && isDue(moveMemory?.[lineId + ':' + ply]?.due, now)) return ply;
+    const moveColor = ply % 2 === 0 ? firstTurn : (firstTurn === 'w' ? 'b' : 'w');
+    if (moveColor === ownColor && isDue(moveMemory?.[lineId + ':' + ply]?.due, now)) return ply;
   }
   return 0;
 }

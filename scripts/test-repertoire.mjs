@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
+import { loadTrainingLine, isOwnTrainingPly } from '../src/study/trainingBoard.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
-import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
+import { collectKnownContinuationSans, rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
+import { buildRepertoireMoveTree } from '../src/study/repertoireMoveTree.mjs';
+import { analyzeTranspositions } from '../src/study/transpositions.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
@@ -73,6 +76,39 @@ equal(coverageSummary.weightedCoverage, 50, 'dekking wordt gewogen naar partijfr
 equal(coverageSummary.missingMoves.length, 1, 'ontbrekende vervolgen worden op bruikbare steekproef gefilterd');
 equal(coverageSummary.missingMoves[0].san, 'c5', 'meest relevante ontbrekende zet blijft beschikbaar');
 equal(summarizeCoverageMoves([], []).weightedCoverage, null, 'geen databasegegevens geven geen misleidend percentage');
+
+const coverageCustomStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const coverageCustomFenPgn = '[Event "Custom FEN coverage"]\n[SetUp "1"]\n[FEN "' + coverageCustomStartFen + '"]\n\n1... c5 2. Nf3 d6 *';
+const coverageCustomPosition = new Chess(coverageCustomStartFen);
+play(coverageCustomPosition, 'c5', 'custom-FEN coverage position');
+const customFenKnownReplies = collectKnownContinuationSans(
+  [{ id: 'custom-fen', moves: coverageCustomFenPgn }],
+  coverageCustomPosition.fen(),
+);
+check(customFenKnownReplies.includes('Nf3'), 'coverage herkent een bestaande vervolgzet vanuit de FEN-header van een variant');
+equal(
+  collectKnownContinuationSans([{ id: 'custom-fen', moves: coverageCustomFenPgn }], new Chess().fen()).length,
+  0,
+  'een custom-FEN-variant wordt niet ten onrechte vanaf de standaard beginstelling afgespeeld',
+);
+const noCastlingCoverageFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b - - 0 1';
+const noCastlingCoveragePosition = new Chess(noCastlingCoverageFen);
+play(noCastlingCoveragePosition, 'c5', 'custom-FEN coverage zonder rokaderechten');
+equal(
+  collectKnownContinuationSans([{ id: 'custom-fen', moves: coverageCustomFenPgn }], noCastlingCoveragePosition.fen()).length,
+  0,
+  'coverage verwart custom-FEN-posities met verschillende rokaderechten niet',
+);
+const standardCoveragePgn = '1. e4 c5 2. Nf3 d6';
+const standardCoveragePosition = new Chess();
+play(standardCoveragePosition, 'e4', 'standard coverage e4');
+play(standardCoveragePosition, 'c5', 'standard coverage c5');
+const transposedKnownReplies = collectKnownContinuationSans([
+  { id: 'standard-route', moves: standardCoveragePgn },
+  { id: 'custom-route', moves: coverageCustomFenPgn },
+], standardCoveragePosition.fen());
+check(transposedKnownReplies.includes('Nf3'), 'coverage behoudt vervolgzetten uit standaard PGN-routes');
+
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
@@ -173,6 +209,54 @@ check(fianchettoNode, 'transpositiepositie staat als één gedeelde node in de b
 check(fianchettoNode.pathCount >= 2, 'transpositiepositie bewaart beide verschillende zettenvolgordes');
 check(tree.transpositionPositions >= 1, 'boom telt transpositieposities');
 equal(getRepertoireContinuations(tree, 'invalid fen').length, 0, 'onbekende stelling geeft geen repertoirezetten');
+
+// 5c. A shared graph node keeps its shortest relative ply regardless of input order.
+const longTranspositionLine = {
+  id: 'long-route',
+  name: 'Omweg naar Nf3',
+  moves: '1. Na3 Nf6 2. Nb1 Ng8 3. Nf3',
+};
+const shortTranspositionLine = {
+  id: 'short-route',
+  name: 'Direct Nf3',
+  moves: '1. Nf3',
+};
+const repeatedPositionKey = positionKey(gameFromPgn('1. Nf3'));
+const longFirstGraph = buildRepertoireTree([longTranspositionLine, shortTranspositionLine]);
+const shortFirstGraph = buildRepertoireTree([shortTranspositionLine, longTranspositionLine]);
+const longFirstPosition = longFirstGraph.nodes.find(node => node.key === repeatedPositionKey);
+const shortFirstPosition = shortFirstGraph.nodes.find(node => node.key === repeatedPositionKey);
+equal(longFirstPosition?.ply, 1, 'transpositienode gebruikt de kortste zettenafstand, ook als de langere route eerst komt');
+equal(shortFirstPosition?.ply, 1, 'transpositienode blijft dezelfde zettenafstand bij omgekeerde invoervolgorde');
+equal(longFirstPosition?.pathCount, 2, 'transpositie behoudt beide verschillende zettenreeksen');
+
+// 5d. The displayed move tree keeps custom-FEN roots separate and uses PGN fullmove numbers.
+const customMoveTreeFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
+const customMoveTreePgnA = '[Event "Custom start A"]\n[SetUp "1"]\n[FEN "' + customMoveTreeFen + '"]\n\n12... c5 13. Nf3 *';
+const customMoveTreePgnB = '[Event "Custom start B"]\n[SetUp "1"]\n[FEN "' + customMoveTreeFen + '"]\n\n12... e5 13. Nf3 *';
+const moveDisplayTree = buildRepertoireMoveTree([
+  { id: 'standard-display', name: 'Standaard', moves: '1. e4 e5 2. Nf3' },
+  { id: 'custom-display-a', name: 'Custom met c5', moves: customMoveTreePgnA },
+  { id: 'custom-display-b', name: 'Custom met e5', moves: customMoveTreePgnB },
+]);
+equal(moveDisplayTree.validLines, 3, 'move tree accepteert standaard- en custom-FEN-varianten');
+equal(moveDisplayTree.invalidLines, 0, 'geldige custom-FEN-varianten worden niet afgewezen');
+equal(moveDisplayTree.roots.length, 2, 'standaard en custom FEN krijgen afzonderlijke boomwortels');
+const standardDisplayRoot = moveDisplayTree.roots.find(root => root.isStandard);
+const customDisplayRoot = moveDisplayTree.roots.find(root => !root.isStandard);
+check(standardDisplayRoot && customDisplayRoot, 'beide startposities blijven afzonderlijk beschikbaar');
+equal(customDisplayRoot?.turn, 'b', 'custom-FEN-wortel bewaart zwart aan zet');
+equal(customDisplayRoot?.moveNumber, 12, 'custom-FEN-wortel bewaart het oorspronkelijke zetnummer');
+equal(customDisplayRoot?.lineIds.length, 2, 'varianten met dezelfde custom-FEN-start delen hun wortel');
+check(customDisplayRoot?.moves.some(move => move.san === 'c5'), 'custom-FEN-wortel bevat de eerste zwarte c5-zet');
+check(customDisplayRoot?.moves.some(move => move.san === 'e5'), 'custom-FEN-wortel behoudt alternatieve eerste zetten');
+const customC5Node = customDisplayRoot?.moves.find(move => move.san === 'c5');
+equal(customC5Node?.color, 'b', 'eerste custom-FEN-zet wordt als zwarte zet getoond');
+equal(customC5Node?.moveNumber, 12, 'eerste zwarte custom-FEN-zet wordt als 12... genummerd');
+const customNf3Node = customC5Node?.children.find(move => move.san === 'Nf3');
+equal(customNf3Node?.color, 'w', 'antwoord na custom-FEN-start wordt als witte zet getoond');
+equal(customNf3Node?.moveNumber, 13, 'witte antwoordzet behoudt zetnummer 13');
+check(standardDisplayRoot?.moves.some(move => move.san === 'e4'), 'standaardbegin blijft een eigen zettenboomwortel');
 
 // 6. PGN collection import semantics: multiple tagged games, metadata, and invalid-game handling.
 const collection = `[Event "Schots - hoofdvariant"]
@@ -298,6 +382,35 @@ equal(selectDueOwnPly(6, 'Wit', { 'x:0': { due: fixedNow + 100 }, 'x:2': { due: 
 equal(selectDueOwnPly(6, 'Zwart', { 'x:1': { due: fixedNow - 1 } }, 'x', fixedNow + 50, fixedNow), 1, 'zwart herhaalt eerste eigen zet die verschuldigd is');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow - 1, fixedNow), 0, 'verlopen hele variant start vanaf begin');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen vervallen zet valt terug op beginstelling');
+
+const customTrainingStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
+const customTrainingPgn = '[Event "Custom-FEN board training"]\n[SetUp "1"]\n[FEN "' + customTrainingStartFen + '"]\n\n12... c5 13. Nf3 *';
+const customTrainingLine = loadTrainingLine(customTrainingPgn);
+equal(customTrainingLine.startTurn, 'b', 'custom-FEN-training bewaart zwart aan zet');
+equal(new Chess(customTrainingLine.startFen).fen(), customTrainingStartFen, 'custom-FEN-training begint vanaf de opgegeven stelling en zetnummer');
+equal(customTrainingLine.san[0], 'c5', 'eerste custom-FEN-zet wordt vanuit de opgegeven stelling geparsed');
+check(isOwnTrainingPly(0, 'Zwart', customTrainingLine.startTurn), 'zwart krijgt de eerste zet wanneer de custom FEN zwart aan zet heeft');
+check(!isOwnTrainingPly(0, 'Wit', customTrainingLine.startTurn), 'wit krijgt niet ten onrechte de eerste zwarte zet');
+check(isOwnTrainingPly(1, 'Wit', customTrainingLine.startTurn), 'wit krijgt de volgende zet na een custom-FEN-start met zwart aan zet');
+check(!isOwnTrainingPly(1, 'Zwart', customTrainingLine.startTurn), 'zwart krijgt niet de witte antwoordzet');
+equal(
+  selectDueOwnPly(2, 'Wit', { 'custom-line:1': { due: fixedNow - 1 } }, 'custom-line', fixedNow + 100, fixedNow, customTrainingLine.startTurn),
+  1,
+  'zetherhaling vindt de vervallen witte zet op ply 1 na een zwarte custom-FEN-start',
+);
+equal(
+  selectDueOwnPly(2, 'Zwart', { 'custom-line:0': { due: fixedNow - 1 } }, 'custom-line', fixedNow + 100, fixedNow, customTrainingLine.startTurn),
+  0,
+  'zetherhaling vindt de vervallen zwarte zet op ply 0 na een zwarte custom-FEN-start',
+);
+const customTrainingReplay = new Chess(customTrainingLine.startFen);
+customTrainingReplay.move(customTrainingLine.san[0]);
+equal(customTrainingReplay.turn(), 'w', 'na de eerste zwarte custom-FEN-trainingszet is wit aan zet');
+equal(customTrainingReplay.fen().split(' ')[5], '13', 'na de zwarte zet wordt het FEN-fullmove-nummer verhoogd');
+const standardTrainingLine = loadTrainingLine('1. e4 e5 *');
+equal(standardTrainingLine.startTurn, 'w', 'standaard PGN-training behoudt wit als beginzijde');
+check(isOwnTrainingPly(0, 'Wit', standardTrainingLine.startTurn), 'standaard PGN-training blijft bij wit op ply 0 beginnen');
+check(isOwnTrainingPly(1, 'Zwart', standardTrainingLine.startTurn), 'standaard PGN-training blijft bij zwart op ply 1 beginnen');
 
 
 const extraFsrsFirst = scheduleFsrsMoveResult(undefined, true, fixedNow);
@@ -434,6 +547,7 @@ equal(coveredGame.firstDeviation, null, 'een volledige match tot het einde van d
 check(coveredGame.summary.includes('Italiaans'), 'review herkent welke repertoirelijn gevolgd is');
 const uncoveredGame = analyzeGameAgainstRepertoire('1. e4 e5 2. Nf3', [{ name: 'Korte lijn', color: 'Wit', moves: '1. e4 e5' }]);
 equal(uncoveredGame.firstDeviation?.kind, 'gap', 'review herkent wanneer een gespeelde voortzetting buiten de opgeslagen lijn valt');
+check(uncoveredGame.summary.includes('2. Nf3'), 'gapmelding gebruikt het juiste PGN-zetnummer voor de afwijkende zet');
 const transpositionReview = analyzeGameAgainstRepertoire(
   '1. g3 d5 2. Nf3 Nf6 3. Bg2 g6 4. O-O',
   [{ id: 'fianchetto', name: 'Fianchetto-opbouw', color: 'Wit', moves: '1. Nf3 d5 2. g3 Nf6 3. Bg2 g6 4. O-O' }],
@@ -441,6 +555,121 @@ const transpositionReview = analyzeGameAgainstRepertoire(
 equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie met andere zettenvolgorde');
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
+
+const longTranspositionReview = analyzeGameAgainstRepertoire(
+  '1. g3 g6 2. f3 f6 3. e3 e6 4. d3 d6 5. c3 c6 6. b3 b6 7. a3 a6 8. Nh3 *',
+  [{ id: 'pawn-order', name: 'Pionnen in a-tot-g-volgorde', color: 'Wit', moves: '1. a3 a6 2. b3 b6 3. c3 c6 4. d3 d6 5. e3 e6 6. f3 f6 7. g3 g6 8. Nh3 *' }],
+);
+equal(longTranspositionReview.firstDeviation, null, 'review herkent een transpositie na meer dan twaalf halve zetten');
+equal(longTranspositionReview.transpositionCount, 14, 'review telt alle veertien halve zetten van de lange transpositie');
+equal(longTranspositionReview.matchedPlies, 1, 'review hervat repertoirematching na de lange transpositie');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+// 13. Custom-FEN PGNs must branch from their declared starting position, not the standard root.
+const customStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const customFenPgn = '[Event "Custom start"]\n[SetUp "1"]\n[FEN "' + customStartFen + '"]\n\n1... c5 *';
+const customFenTree = buildRepertoireTree([
+  { id: 'custom-fen-line', name: 'Siciliaans vanaf FEN', moves: customFenPgn },
+]);
+equal(customFenTree.validLines, 1, 'PGN met custom FEN wordt als geldige variant verwerkt');
+equal(customFenTree.invalidLines, 0, 'PGN met custom FEN veroorzaakt geen replayfout');
+const customFenMoves = getRepertoireContinuations(customFenTree, customStartFen);
+check(customFenMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling toont de opgeslagen vervolgzet');
+check(!getRepertoireContinuations(customFenTree, new Chess().fen()).some(move => move.san === 'c5'), 'custom-FEN-variant vervuilt de standaard beginstelling niet');
+
+// 14. Identical board placement with different castling rights must not be merged as a transposition.
+const customFenNoCastling = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b - - 0 1';
+const castlingRightsTree = buildRepertoireTree([
+  { id: 'fen-castling', name: 'FEN met rokaderechten', moves: '[SetUp "1"]\n[FEN "' + customStartFen + '"]\n\n1... c5 *' },
+  { id: 'fen-no-castling', name: 'FEN zonder rokaderechten', moves: '[SetUp "1"]\n[FEN "' + customFenNoCastling + '"]\n\n1... e5 *' },
+]);
+const withCastlingMoves = getRepertoireContinuations(castlingRightsTree, customStartFen);
+const withoutCastlingMoves = getRepertoireContinuations(castlingRightsTree, customFenNoCastling);
+check(withCastlingMoves.some(move => move.san === 'c5'), 'custom-FEN-stelling met rokaderechten behoudt eigen vervolgzetten');
+check(!withCastlingMoves.some(move => move.san === 'e5'), 'stelling met rokaderechten neemt geen zet uit andere FEN over');
+check(withoutCastlingMoves.some(move => move.san === 'e5'), 'custom-FEN-stelling zonder rokaderechten behoudt eigen vervolgzetten');
+check(!withoutCastlingMoves.some(move => move.san === 'c5'), 'stelling zonder rokaderechten neemt geen zet uit andere FEN over');
+
+
+// 15. Transposition analysis must replay custom-FEN games from their declared start.
+const afterE4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const fenTranspositions = analyzeTranspositions([
+  { id: 'standard-e4-e5', name: 'Standaard e4-e5', moves: '1. e4 e5' },
+  { id: 'custom-after-e4', name: 'Vanaf FEN na e4', moves: `[SetUp "1"]
+[FEN "${afterE4Fen}"]
+
+1... e5 *` },
+]);
+const customFenAfterE5 = new Chess(afterE4Fen);
+play(customFenAfterE5, 'e5', 'custom-FEN-transpositie');
+const sharedFenPosition = fenTranspositions.find(item => item.fen === positionKey(customFenAfterE5));
+check(sharedFenPosition, 'transpositie-analyse neemt de custom-FEN-voortzetting mee');
+equal(sharedFenPosition.paths, 2, 'standaard- en custom-FEN-route naar dezelfde stelling worden als twee paden herkend');
+check(sharedFenPosition.names.includes('Vanaf FEN na e4'), 'transpositie-analyse bewaart de naam van de custom-FEN-variant');
+
+// 16. Different custom-FEN roots that converge after king moves remain distinct paths.
+const rightsRootFen = 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1';
+const noRightsRootFen = 'r3k2r/8/8/8/8/8/8/R3K2R w - - 0 1';
+const convergingCustomLines = [
+  {
+    id: 'custom-rights-root',
+    name: 'Custom start with castling rights',
+    moves: `[SetUp "1"]\n[FEN "${rightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 3. Ra2 *`,
+  },
+  {
+    id: 'custom-no-rights-root',
+    name: 'Custom start without castling rights',
+    moves: `[SetUp "1"]\n[FEN "${noRightsRootFen}"]\n\n1. Kd2 Kd7 2. Ke1 Ke8 3. Ra2 *`,
+  },
+];
+const convergedPosition = new Chess(rightsRootFen);
+for (const san of ['Kd2', 'Kd7', 'Ke1', 'Ke8', 'Ra2']) play(convergedPosition, san, 'custom-FEN convergence ' + san);
+const convergingTree = buildRepertoireTree(convergingCustomLines);
+const convergedNode = convergingTree.nodes.find(node => node.key === positionKey(convergedPosition));
+check(convergedNode, 'custom-FEN routes create their converged position node');
+equal(convergedNode.pathCount, 2, 'tree counts distinct custom-FEN roots even when their SAN paths match');
+const convergedSummary = analyzeTranspositions(convergingCustomLines)
+  .find(item => item.fen === positionKey(convergedPosition));
+check(convergedSummary, 'transposition analysis includes the converged custom-FEN position');
+equal(convergedSummary.paths, 2, 'transposition analysis distinguishes different FEN roots with identical SAN paths');
+
+
+ 
+// 17. Game review must start both the played game and repertoire lines from their PGN FEN.
+const customFenReviewStart = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
+const customFenReview = analyzeGameAgainstRepertoire(
+  `[Event "Custom-FEN review"]
+[SetUp "1"]
+[FEN "${customFenReviewStart}"]
+
+12... d5 *`,
+  [{
+    id: 'custom-review-line',
+    name: 'Zwart speelt ...e5',
+    moves: `[SetUp "1"]
+[FEN "${customFenReviewStart}"]
+
+12... e5 *`,
+  }],
+);
+equal(customFenReview.firstDeviation?.ply, 0, 'custom-FEN-review vindt de afwijking vanaf de juiste beginstelling');
+equal(customFenReview.firstDeviation?.side, 'Zwart', 'custom-FEN-review gebruikt de kleur aan zet uit de FEN');
+equal(customFenReview.firstDeviation?.expectedMoves.join(','), 'e5', 'custom-FEN-review toont de opgeslagen zwarte voortzetting');
+check(customFenReview.summary.includes('12... d5 (Zwart)'), 'custom-FEN-review behoudt het FEN-zetnummer in het verslag');
+
+const customFenReviewTransposition = analyzeGameAgainstRepertoire(
+  '1. e4 e5 *',
+  [{
+    id: 'custom-review-transposition',
+    name: 'Zwart vanaf FEN na e4',
+    moves: `[SetUp "1"]
+[FEN "${customStartFen}"]
+
+1... e5 *`,
+  }],
+);
+equal(customFenReviewTransposition.firstDeviation, null, 'game review herkent een standaardpartij die naar een custom-FEN-repertoirepositie transponeert');
+equal(customFenReviewTransposition.matchedPlies, 1, 'game review vervolgt na de transpositie met de opgeslagen zet');
+equal(customFenReviewTransposition.transpositionCount, 1, 'game review telt de zetten tot de custom-FEN-transpositie');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
