@@ -384,7 +384,7 @@ equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow - 1, fixedNow), 0, 'verlopen h
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen vervallen zet valt terug op beginstelling');
 
 const customTrainingStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
-const customTrainingPgn = '[Event "Custom-FEN board training"]\\n[SetUp "1"]\\n[FEN "' + customTrainingStartFen + '"]\\n\\n12... c5 13. Nf3 *';
+const customTrainingPgn = '[Event "Custom-FEN board training"]\n[SetUp "1"]\n[FEN "' + customTrainingStartFen + '"]\n\n12... c5 13. Nf3 *';
 const customTrainingLine = loadTrainingLine(customTrainingPgn);
 equal(customTrainingLine.startTurn, 'b', 'custom-FEN-training bewaart zwart aan zet');
 equal(new Chess(customTrainingLine.startFen).fen(), customTrainingStartFen, 'custom-FEN-training begint vanaf de opgegeven stelling en zetnummer');
