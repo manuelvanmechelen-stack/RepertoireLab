@@ -406,7 +406,7 @@ equal(
 const customTrainingReplay = new Chess(customTrainingLine.startFen);
 customTrainingReplay.move(customTrainingLine.san[0]);
 equal(customTrainingReplay.turn(), 'w', 'na de eerste zwarte custom-FEN-trainingszet is wit aan zet');
-equal(customTrainingReplay.fen().split(' ')[5], '12', 'custom-FEN-training behoudt het fullmove-nummer tijdens het afspelen');
+equal(customTrainingReplay.fen().split(' ')[5], '13', 'na de zwarte zet wordt het FEN-fullmove-nummer verhoogd');
 const standardTrainingLine = loadTrainingLine('1. e4 e5 *');
 equal(standardTrainingLine.startTurn, 'w', 'standaard PGN-training behoudt wit als beginzijde');
 check(isOwnTrainingPly(0, 'Wit', standardTrainingLine.startTurn), 'standaard PGN-training blijft bij wit op ply 0 beginnen');
