@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
+import { loadTrainingLine, isOwnTrainingPly } from '../src/study/trainingBoard.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
@@ -381,6 +382,35 @@ equal(selectDueOwnPly(6, 'Wit', { 'x:0': { due: fixedNow + 100 }, 'x:2': { due: 
 equal(selectDueOwnPly(6, 'Zwart', { 'x:1': { due: fixedNow - 1 } }, 'x', fixedNow + 50, fixedNow), 1, 'zwart herhaalt eerste eigen zet die verschuldigd is');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow - 1, fixedNow), 0, 'verlopen hele variant start vanaf begin');
 equal(selectDueOwnPly(6, 'Wit', {}, 'x', fixedNow + 100, fixedNow), 0, 'geen vervallen zet valt terug op beginstelling');
+
+const customTrainingStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
+const customTrainingPgn = '[Event "Custom-FEN board training"]\\n[SetUp "1"]\\n[FEN "' + customTrainingStartFen + '"]\\n\\n12... c5 13. Nf3 *';
+const customTrainingLine = loadTrainingLine(customTrainingPgn);
+equal(customTrainingLine.startTurn, 'b', 'custom-FEN-training bewaart zwart aan zet');
+equal(new Chess(customTrainingLine.startFen).fen(), customTrainingStartFen, 'custom-FEN-training begint vanaf de opgegeven stelling en zetnummer');
+equal(customTrainingLine.san[0], 'c5', 'eerste custom-FEN-zet wordt vanuit de opgegeven stelling geparsed');
+check(isOwnTrainingPly(0, 'Zwart', customTrainingLine.startTurn), 'zwart krijgt de eerste zet wanneer de custom FEN zwart aan zet heeft');
+check(!isOwnTrainingPly(0, 'Wit', customTrainingLine.startTurn), 'wit krijgt niet ten onrechte de eerste zwarte zet');
+check(isOwnTrainingPly(1, 'Wit', customTrainingLine.startTurn), 'wit krijgt de volgende zet na een custom-FEN-start met zwart aan zet');
+check(!isOwnTrainingPly(1, 'Zwart', customTrainingLine.startTurn), 'zwart krijgt niet de witte antwoordzet');
+equal(
+  selectDueOwnPly(2, 'Wit', { 'custom-line:1': { due: fixedNow - 1 } }, 'custom-line', fixedNow + 100, fixedNow, customTrainingLine.startTurn),
+  1,
+  'zetherhaling vindt de vervallen witte zet op ply 1 na een zwarte custom-FEN-start',
+);
+equal(
+  selectDueOwnPly(2, 'Zwart', { 'custom-line:0': { due: fixedNow - 1 } }, 'custom-line', fixedNow + 100, fixedNow, customTrainingLine.startTurn),
+  0,
+  'zetherhaling vindt de vervallen zwarte zet op ply 0 na een zwarte custom-FEN-start',
+);
+const customTrainingReplay = new Chess(customTrainingLine.startFen);
+customTrainingReplay.move(customTrainingLine.san[0]);
+equal(customTrainingReplay.turn(), 'w', 'na de eerste zwarte custom-FEN-trainingszet is wit aan zet');
+equal(customTrainingReplay.fen().split(' ')[5], '12', 'custom-FEN-training behoudt het fullmove-nummer tijdens het afspelen');
+const standardTrainingLine = loadTrainingLine('1. e4 e5 *');
+equal(standardTrainingLine.startTurn, 'w', 'standaard PGN-training behoudt wit als beginzijde');
+check(isOwnTrainingPly(0, 'Wit', standardTrainingLine.startTurn), 'standaard PGN-training blijft bij wit op ply 0 beginnen');
+check(isOwnTrainingPly(1, 'Zwart', standardTrainingLine.startTurn), 'standaard PGN-training blijft bij zwart op ply 1 beginnen');
 
 
 const extraFsrsFirst = scheduleFsrsMoveResult(undefined, true, fixedNow);
