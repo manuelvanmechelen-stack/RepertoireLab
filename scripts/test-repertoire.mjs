@@ -9,6 +9,7 @@ import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { getDueMoveLineIds, getLineMoveMemoryEntries, rankTrainingLines } from '../src/study/trainingPriority.mjs';
+import { firstChangedPly, pruneLineMoveMemoryFromPly } from '../src/study/moveMemory.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
 
@@ -58,6 +59,35 @@ const overlappingPriority = rankTrainingLines([
   { id: 'line:child', due: priorityNow + 86_400_000, intervalDays: 5 },
 ], overlappingLineMemory, {}, priorityNow);
 equal(overlappingPriority[0].id, 'line:child', 'move-level fouten en due-status worden alleen aan de juiste variant toegerekend');
+const originalEditedLine = '1. e4 e5 2. Nf3 Nc6 3. Bb5';
+const changedEditedLine = '1. e4 e5 2. Nf3 Nc6 3. Bc4';
+equal(firstChangedPly(originalEditedLine, changedEditedLine), 4, 'een gewijzigde repertoirezet identificeert de eerste gewijzigde halve zet');
+equal(firstChangedPly('1. e4 e5', '1. e4 e5 2. Nf3'), 2, 'een toegevoegde voortzetting behoudt de bestaande zetgeschiedenis');
+equal(firstChangedPly('1. e4 e5 2. Nf3', '1. e4 e5 2. Nf3'), null, 'een ongewijzigde zettenreeks behoudt alle herhaalstatus');
+const standardStartPgn = '1. e4 e5 *';
+const counterOnlyFenPgn = '[SetUp "1"]\\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 9 7"]\\n\\n7. e4 e5 *';
+equal(firstChangedPly(standardStartPgn, counterOnlyFenPgn), null, 'alleen FEN-zet- en halfzet-tellers wijzigen de identiteit van een zet niet');
+const castlingRightsFenPgn = '[SetUp "1"]\\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"]\\n\\n1. e4 e5 *';
+equal(firstChangedPly(standardStartPgn, castlingRightsFenPgn), 0, 'dezelfde SAN vanaf andere rokaderechten krijgt een nieuwe zetidentiteit');
+throws(() => firstChangedPly(originalEditedLine, '1. e4 Qh9'), 'een ongeldige nieuwe PGN wordt niet als veilige prefix behandeld');
+const editMemory = {
+  'edited:0': { seen: 3 },
+  'edited:3': { seen: 2 },
+  'edited:4': { seen: 8 },
+  'edited:6': { seen: 1 },
+  'edited:child:0': { seen: 9 },
+  'other:0': { seen: 5 },
+};
+const prunedEditMemory = pruneLineMoveMemoryFromPly(editMemory, 'edited', 4);
+check(Boolean(prunedEditMemory['edited:0']) && Boolean(prunedEditMemory['edited:3']), 'ongewijzigde eerdere zetten behouden hun FSRS-geheugen');
+check(!prunedEditMemory['edited:4'] && !prunedEditMemory['edited:6'], 'gewijzigde en latere zetten verliezen verouderd FSRS-geheugen');
+check(Boolean(prunedEditMemory['edited:child:0']) && Boolean(prunedEditMemory['other:0']), 'geheugen van child-varianten en andere lijnen blijft onaangetast');
+const replaceLineStart = appSource.indexOf('function replaceCurrentLine() {');
+const replaceLineEnd = appSource.indexOf('function clickSquare(square: Square)', replaceLineStart);
+const replaceLineSource = appSource.slice(replaceLineStart, replaceLineEnd);
+check(replaceLineSource.includes('firstChangedPly') && replaceLineSource.includes('pruneLineMoveMemoryFromPly'),
+  'bewerken van een repertoirelijn synchroniseert de zetwijziging met individueel herhaalgeheugen');
+
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const dueIdsDeclaration = appSource.indexOf('const dueMoveLineIds = useMemo');
 const trainingHealthDeclaration = appSource.indexOf('const trainingHealth = useMemo');

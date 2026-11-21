@@ -9,6 +9,7 @@ import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs'
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { getDueMoveLineIds, getLineMoveMemoryEntries, rankTrainingLines } from './study/trainingPriority.mjs';
+import { firstChangedPly, pruneLineMoveMemoryFromPly } from './study/moveMemory.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
 import { evaluationLossCp } from './study/engineAudit.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
@@ -1758,11 +1759,39 @@ function App() {
       setNotice('De beginstelling kan niet als openinglijn worden opgeslagen.');
       return;
     }
+    const updatedMoves = game.pgn();
+    let changedPly: number | null;
+    try {
+      changedPly = firstChangedPly(current.moves, updatedMoves);
+    } catch {
+      setNotice('De bestaande of nieuwe PGN kan niet betrouwbaar worden vergeleken. Er is niets gewijzigd.');
+      return;
+    }
     setLines(previous => previous.map(line => line.id === current.id
-      ? { ...line, moves: game.pgn() }
+      ? changedPly === null
+        ? { ...line, moves: updatedMoves }
+        : {
+            ...line,
+            moves: updatedMoves,
+            due: 0,
+            seen: 0,
+            intervalDays: undefined,
+            fsrsCard: undefined,
+            tags: (line.tags ?? []).filter(tag => tag !== 'Herhaling actief' && tag !== 'Opnieuw oefenen'),
+          }
       : line
     ));
-    setNotice('Geselecteerde variant bijgewerkt met de zetten op het bord.');
+    if (changedPly !== null) {
+      setMoveMemory(previous => pruneLineMoveMemoryFromPly(previous, current.id, changedPly));
+      setMissedMoves(previous => {
+        const next = { ...previous };
+        delete next[current.id];
+        return next;
+      });
+      setNotice('Variant bijgewerkt. De herhaalstatus vanaf halve zet ' + (changedPly + 1) + ' is opnieuw ingesteld; ongewijzigde eerdere zetten behouden hun geheugen.');
+    } else {
+      setNotice('Variant bijgewerkt. De bestaande herhaalstatus is behouden omdat de zetten niet zijn veranderd.');
+    }
   }
   function clickSquare(square: Square) {
     if (selected && legalTargets.includes(square)) {
