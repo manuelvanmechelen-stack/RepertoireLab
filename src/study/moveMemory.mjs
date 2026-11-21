@@ -8,7 +8,7 @@ function readVerboseHistory(pgn) {
 }
 
 function moveIdentity(move) {
-  const position = String(move.before ?? '').split(/\\s+/).slice(0, 4).join(' ');
+  const position = String(move.before ?? '').split(/\s+/).slice(0, 4).join(' ');
   const uci = String(move.from ?? '') + String(move.to ?? '') + String(move.promotion ?? '');
   return position + '|' + uci;
 }
@@ -42,7 +42,7 @@ export function pruneLineMoveMemoryFromPly(moveMemory = {}, lineId, firstPly) {
   return Object.fromEntries(Object.entries(moveMemory).filter(([key]) => {
     if (!key.startsWith(prefix)) return true;
     const plyText = key.slice(prefix.length);
-    if (!/^(0|[1-9]\\d*)$/.test(plyText)) return true;
+    if (!/^(0|[1-9]\d*)$/.test(plyText)) return true;
     const ply = Number(plyText);
     return !Number.isSafeInteger(ply) || ply < firstPly;
   }));

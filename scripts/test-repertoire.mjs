@@ -65,9 +65,9 @@ equal(firstChangedPly(originalEditedLine, changedEditedLine), 4, 'een gewijzigde
 equal(firstChangedPly('1. e4 e5', '1. e4 e5 2. Nf3'), 2, 'een toegevoegde voortzetting behoudt de bestaande zetgeschiedenis');
 equal(firstChangedPly('1. e4 e5 2. Nf3', '1. e4 e5 2. Nf3'), null, 'een ongewijzigde zettenreeks behoudt alle herhaalstatus');
 const standardStartPgn = '1. e4 e5 *';
-const counterOnlyFenPgn = '[SetUp "1"]\\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 9 7"]\\n\\n7. e4 e5 *';
+const counterOnlyFenPgn = '[SetUp "1"]\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 9 7"]\n\n7. e4 e5 *';
 equal(firstChangedPly(standardStartPgn, counterOnlyFenPgn), null, 'alleen FEN-zet- en halfzet-tellers wijzigen de identiteit van een zet niet');
-const castlingRightsFenPgn = '[SetUp "1"]\\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"]\\n\\n1. e4 e5 *';
+const castlingRightsFenPgn = '[SetUp "1"]\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"]\n\n1. e4 e5 *';
 equal(firstChangedPly(standardStartPgn, castlingRightsFenPgn), 0, 'dezelfde SAN vanaf andere rokaderechten krijgt een nieuwe zetidentiteit');
 throws(() => firstChangedPly(originalEditedLine, '1. e4 Qh9'), 'een ongeldige nieuwe PGN wordt niet als veilige prefix behandeld');
 const editMemory = {
@@ -82,13 +82,12 @@ const prunedEditMemory = pruneLineMoveMemoryFromPly(editMemory, 'edited', 4);
 check(Boolean(prunedEditMemory['edited:0']) && Boolean(prunedEditMemory['edited:3']), 'ongewijzigde eerdere zetten behouden hun FSRS-geheugen');
 check(!prunedEditMemory['edited:4'] && !prunedEditMemory['edited:6'], 'gewijzigde en latere zetten verliezen verouderd FSRS-geheugen');
 check(Boolean(prunedEditMemory['edited:child:0']) && Boolean(prunedEditMemory['other:0']), 'geheugen van child-varianten en andere lijnen blijft onaangetast');
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const replaceLineStart = appSource.indexOf('function replaceCurrentLine() {');
 const replaceLineEnd = appSource.indexOf('function clickSquare(square: Square)', replaceLineStart);
 const replaceLineSource = appSource.slice(replaceLineStart, replaceLineEnd);
 check(replaceLineSource.includes('firstChangedPly') && replaceLineSource.includes('pruneLineMoveMemoryFromPly'),
   'bewerken van een repertoirelijn synchroniseert de zetwijziging met individueel herhaalgeheugen');
-
-const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const dueIdsDeclaration = appSource.indexOf('const dueMoveLineIds = useMemo');
 const trainingHealthDeclaration = appSource.indexOf('const trainingHealth = useMemo');
 check(dueIdsDeclaration >= 0 && trainingHealthDeclaration >= 0 && dueIdsDeclaration < trainingHealthDeclaration,
