@@ -96,14 +96,15 @@ check(Boolean(deletedParentMemory['line:child:0']) && Boolean(deletedParentMemor
 check(Boolean(deletedParentMemory['line:legacy']) && Boolean(deletedParentMemory['other:0']), 'onbekende legacy-sleutels en geheugen van andere varianten blijven behouden');
 const deletedChildMemory = removeLineMoveMemory(memoryBeforeDelete, 'line:child');
 check(!deletedChildMemory['line:child:0'] && Boolean(deletedChildMemory['line:0']) && Boolean(deletedChildMemory['line:childish:0']), 'een lijn-ID met dubbele punten wordt exact verwijderd zonder prefixbotsing');
-const appDeleteLineStart = appSource.indexOf('function deleteLine(id: string) {');
+const appSourceForDeletion = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const appDeleteLineStart = appSourceForDeletion.indexOf('function deleteLine(id: string) {');
 const appDeleteLineEnd = appSource.indexOf('function importPgn()', appDeleteLineStart);
-const appDeleteLineSource = appSource.slice(appDeleteLineStart, appDeleteLineEnd);
+const appDeleteLineSource = appSourceForDeletion.slice(appDeleteLineStart, appDeleteLineEnd);
 check(appDeleteLineSource.includes('removeLineMoveMemory') && appDeleteLineSource.includes('setMissedMoves') && appDeleteLineSource.includes('setEngineLineAudits'),
   'variant verwijderen ruimt zetgeheugen, foutentellers en engine-audits op');
-const appDeleteRepertoireStart = appSource.indexOf('function deleteActiveRepertoire() {');
+const appDeleteRepertoireStart = appSourceForDeletion.indexOf('function deleteActiveRepertoire() {');
 const appDeleteRepertoireEnd = appSource.indexOf('function exportActiveRepertoirePgn()', appDeleteRepertoireStart);
-const appDeleteRepertoireSource = appSource.slice(appDeleteRepertoireStart, appDeleteRepertoireEnd);
+const appDeleteRepertoireSource = appSourceForDeletion.slice(appDeleteRepertoireStart, appDeleteRepertoireEnd);
 check(appDeleteRepertoireSource.includes('removedLineIds') && appDeleteRepertoireSource.includes('removeLineMoveMemory')
   && appDeleteRepertoireSource.includes('setMissedMoves') && appDeleteRepertoireSource.includes('setEngineLineAudits'),
   'repertoire verwijderen ruimt de studiegegevens van alle bijbehorende varianten op');
