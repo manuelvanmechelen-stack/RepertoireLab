@@ -14,3 +14,13 @@ export function rankTrainingLines<T extends TrainingPriorityLine>(
   missedMoves?: Record<string, number>,
   now?: number,
 ): T[];
+
+export function getLineMoveMemoryEntries<T extends TrainingPriorityMemory>(
+  moveMemory: Record<string, T> | undefined,
+  lineId: string,
+): Array<[string, T]>;
+export function getDueMoveLineIds(
+  lines: TrainingPriorityLine[],
+  moveMemory?: Record<string, TrainingPriorityMemory>,
+  now?: number,
+): Set<string>;
