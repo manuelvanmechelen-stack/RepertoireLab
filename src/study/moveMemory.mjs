@@ -59,7 +59,7 @@ export function removeLineMoveMemory(moveMemory = {}, lineId) {
   return Object.fromEntries(Object.entries(moveMemory).filter(([key]) => {
     if (!key.startsWith(prefix)) return true;
     const plyText = key.slice(prefix.length);
-    if (!/^(0|[1-9]\\d*)$/.test(plyText)) return true;
+    if (!/^(0|[1-9]\d*)$/.test(plyText)) return true;
     return !Number.isSafeInteger(Number(plyText));
   }));
 }
