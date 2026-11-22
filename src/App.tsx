@@ -9,7 +9,7 @@ import { rankCoverageMoves, summarizeCoverageMoves } from './study/coverage.mjs'
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from './study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from './study/repertoireTree.mjs';
 import { getDueMoveLineIds, getLineMoveMemoryEntries, rankTrainingLines } from './study/trainingPriority.mjs';
-import { firstChangedPly, pruneLineMoveMemoryFromPly } from './study/moveMemory.mjs';
+import { firstChangedPly, pruneLineMoveMemoryFromPly, removeLineMoveMemory } from './study/moveMemory.mjs';
 import { identifyOpening } from './study/openingCatalog.mjs';
 import { evaluationLossCp } from './study/engineAudit.mjs';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
@@ -1643,13 +1643,25 @@ function App() {
   function deleteActiveRepertoire() {
     if (!activeRepertoire) return;
     const removedId = activeRepertoire.id;
+    const removedLineIds = lines.filter(line => line.repertoireId === removedId).map(line => line.id);
     setRepertoires(previous => previous.filter(item => item.id !== removedId));
     setLines(previous => previous.filter(line => line.repertoireId !== removedId));
+    setMoveMemory(previous => removedLineIds.reduce((memory, lineId) => removeLineMoveMemory(memory, lineId), previous));
+    setMissedMoves(previous => {
+      const next = { ...previous };
+      for (const lineId of removedLineIds) delete next[lineId];
+      return next;
+    });
+    setEngineLineAudits(previous => {
+      const next = { ...previous };
+      for (const lineId of removedLineIds) delete next[lineId];
+      return next;
+    });
     setActiveRepertoireId('');
     setActive('');
     setGame(newGame());
     setSelected(null);
-    setNotice('Repertoire en bijbehorende varianten verwijderd.');
+    setNotice('Repertoire, varianten en bijbehorende trainingsgegevens verwijderd.');
   }
   function exportActiveRepertoirePgn() {
     if (!activeRepertoire || !repertoireLines.length) {
@@ -1868,12 +1880,23 @@ function App() {
   function deleteLine(id: string) {
     const next = lines.filter(line => line.id !== id);
     setLines(next);
+    setMoveMemory(previous => removeLineMoveMemory(previous, id));
+    setMissedMoves(previous => {
+      const updated = { ...previous };
+      delete updated[id];
+      return updated;
+    });
+    setEngineLineAudits(previous => {
+      const updated = { ...previous };
+      delete updated[id];
+      return updated;
+    });
     if (active === id) {
       const nextInRepertoire = next.find(line => line.repertoireId === activeRepertoireId);
       setActive(nextInRepertoire?.id ?? '');
       setGame(newGame(nextInRepertoire?.moves));
     }
-    setNotice('Variant verwijderd.');
+    setNotice('Variant en bijbehorende trainingsgegevens verwijderd.');
   }
   function importPgn() {
     if (!activeRepertoire) {
