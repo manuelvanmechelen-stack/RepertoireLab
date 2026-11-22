@@ -47,3 +47,19 @@ export function pruneLineMoveMemoryFromPly(moveMemory = {}, lineId, firstPly) {
     return !Number.isSafeInteger(ply) || ply < firstPly;
   }));
 }
+
+/**
+ * Remove all canonical move-memory cards owned by one exact repertoire line.
+ * Prefix-related IDs and non-canonical legacy keys are preserved.
+ */
+export function removeLineMoveMemory(moveMemory = {}, lineId) {
+  if (typeof lineId !== 'string' || !lineId) throw new TypeError('lineId moet een niet-lege string zijn.');
+  if (!moveMemory || typeof moveMemory !== 'object' || Array.isArray(moveMemory)) return {};
+  const prefix = lineId + ':';
+  return Object.fromEntries(Object.entries(moveMemory).filter(([key]) => {
+    if (!key.startsWith(prefix)) return true;
+    const plyText = key.slice(prefix.length);
+    if (!/^(0|[1-9]\\d*)$/.test(plyText)) return true;
+    return !Number.isSafeInteger(Number(plyText));
+  }));
+}
