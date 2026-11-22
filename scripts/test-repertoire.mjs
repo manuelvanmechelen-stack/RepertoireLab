@@ -362,7 +362,7 @@ equal(splitPgnCollection(noEventCollection).length, 2, 'PGN zonder Event-tags wo
 check(splitPgnCollection(noEventCollection)[1].includes('[White "A"]'), 'splitsen zonder Event behoudt de volgende partijheaders');
 equal(splitPgnCollection('[Event "Eén"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *').length, 1, 'meerdere headers binnen één partij worden niet gesplitst');
 
-const noResultEventCollection = '[Event "No result"]\\n[Site "Club"]\\n\\n1. e4 e5\\n[Event "Next game"]\\n[Site "Club"]\\n\\n1. d4 d5 *';
+const noResultEventCollection = '[Event "No result"]\n[Site "Club"]\n\n1. e4 e5\n[Event "Next game"]\n[Site "Club"]\n\n1. d4 d5 *';
 const noResultEventChunks = splitPgnCollection(noResultEventCollection);
 equal(noResultEventChunks.length, 2, 'nieuwe Event-header start een partij als de vorige geen resultaatmarker heeft');
 check(noResultEventChunks[0].includes('[Event "No result"]') && noResultEventChunks[1].includes('[Event "Next game"]'), 'beide Event-headers blijven bij de juiste partij');
