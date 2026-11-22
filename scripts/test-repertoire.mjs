@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
-import { splitPgnCollection } from '../src/study/pgn.mjs';
+import { getPgnEventName, splitPgnCollection } from '../src/study/pgn.mjs';
 import { analyzeGameAgainstRepertoire } from '../src/study/gameReview.mjs';
 import { validateBackup } from '../src/study/backup.mjs';
 import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage.mjs';
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
+import { loadFenPosition, movePathSignature, pathSignatureFromPgn } from '../src/study/pathSignature.mjs';
 import { rankTrainingLines } from '../src/study/trainingPriority.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
@@ -187,12 +188,14 @@ const collection = `[Event "Schots - hoofdvariant"]
 
 1. e4 e5 2. Nf3 Nf6 *
 `;
-const chunks = collection.trim().split(/(?=\[Event\s+")/).map(chunk => chunk.trim()).filter(Boolean);
-equal(chunks.length, 2, 'PGN-verzameling moet in twee partijen worden gesplitst');
-const importedNames = chunks.map(chunk => chunk.match(/\[Event\s+"([^"]+)"\]/)?.[1]);
-equal(importedNames[0], 'Schots - hoofdvariant', 'eerste PGN-naam uit metadata');
-equal(importedNames[1], 'Schots - alternatief', 'tweede PGN-naam uit metadata');
+const chunks = splitPgnCollection(collection);
+equal(chunks.length, 2, 'PGN-verzameling wordt door de echte importer in twee partijen gesplitst');
+const importedNames = chunks.map(chunk => getPgnEventName(gameFromPgn(chunk).header()));
+equal(importedNames[0], 'Schots - hoofdvariant', 'eerste PGN-naam komt uit de geparste Event-header');
+equal(importedNames[1], 'Schots - alternatief', 'tweede PGN-naam komt uit de geparste Event-header');
 for (const chunk of chunks) check(gameFromPgn(chunk).history().length > 0, 'elke geïmporteerde PGN bevat zetten');
+equal(getPgnEventName(gameFromPgn('[Event "?"]\n\n1. e4').header()), null, 'onbekende Event-header krijgt de importfallback');
+equal(getPgnEventName(gameFromPgn('1. e4').header()), null, 'ontbrekende Event-header krijgt de importfallback');
 throws(() => gameFromPgn('1. e4 e5 2. Qh9'), 'ongeldige PGN moet worden afgewezen');
 throws(() => gameFromPgn('1. e4 e5 2. Nf3 Nf6 3. Qh5?? Qh4'), 'illegale zetvolgorde moet worden afgewezen');
 
@@ -348,10 +351,38 @@ check(splitCollection[0].includes('Game one') && splitCollection[1].includes('Ga
 equal(splitPgnCollection('   ').length, 0, 'lege PGN levert geen partijen op');
 equal(splitPgnCollection('1. e4 e5').length, 1, 'PGN zonder Event-header blijft één invoer');
 equal(splitPgnCollection(gameOne).length, 1, 'één PGN-partij blijft één invoer');
+
+const resultHeaderFirstCollection = '[Result "1-0"]\n[Site "Club"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 1-0\n[Result "0-1"]\n[Site "Club"]\n[White "C"]\n[Black "D"]\n\n1. d4 d5 0-1';
+const resultHeaderChunks = splitPgnCollection(resultHeaderFirstCollection);
+equal(resultHeaderChunks.length, 2, 'Result-header vóór de overige tags blijft bij de juiste partij');
+check(resultHeaderChunks[0].includes('[Result "1-0"]') && resultHeaderChunks[0].includes('[Black "B"]'), 'alle tags van de eerste partij blijven bijeen');
+
 const noEventCollection = '1. e4 e5 2. Nf3 Nc6 1-0\n[Site "Club"]\n[White "A"]\n[Black "B"]\n\n1. d4 d5 0-1';
 equal(splitPgnCollection(noEventCollection).length, 2, 'PGN zonder Event-tags wordt op voltooide partijgrens gesplitst');
 check(splitPgnCollection(noEventCollection)[1].includes('[White "A"]'), 'splitsen zonder Event behoudt de volgende partijheaders');
 equal(splitPgnCollection('[Event "Eén"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *').length, 1, 'meerdere headers binnen één partij worden niet gesplitst');
+
+const noResultEventCollection = '[Event "No result"]\n[Site "Club"]\n\n1. e4 e5\n[Event "Next game"]\n[Site "Club"]\n\n1. d4 d5 *';
+const noResultEventChunks = splitPgnCollection(noResultEventCollection);
+equal(noResultEventChunks.length, 2, 'nieuwe Event-header start een partij als de vorige geen resultaatmarker heeft');
+check(noResultEventChunks[0].includes('[Event "No result"]') && noResultEventChunks[1].includes('[Event "Next game"]'), 'beide Event-headers blijven bij de juiste partij');
+
+const braceCommentCollection = '[Event "Comment boundary"]\n[Result "*"]\n\n1. e4 e5 { comment begins\n[Event "not a game"]\n0-1\n} 2. Nf3 Nc6 *\n\n[Event "Second game"]\n\n1. d4 d5 *';
+const braceChunks = splitPgnCollection(braceCommentCollection);
+equal(braceChunks.length, 2, 'Event-tags en uitslagen in meerregelige brace-commentaren worden genegeerd');
+equal(getPgnEventName(gameFromPgn(braceChunks[0]).header()), 'Comment boundary', 'commentaartekst kan de echte Event-naam niet vervangen');
+
+const semicolonComment = '[Event "Semicolon comment"]\n\n1. e4 e5 ; fake result 0-1 and [Event "not a game"]\n2. Nf3 Nc6 *';
+equal(splitPgnCollection(semicolonComment).length, 1, 'resultaat en Event-tekst in semicolon-commentaar maken geen grens');
+
+const variationCollection = '[Event "Variation"]\n\n1. e4 e5 (\n[Event "not a game"]\n1... c5 0-1\n) 2. Nf3 Nc6 1-0\n\n[Event "After variation"]\n\n1. d4 d5 *';
+equal(splitPgnCollection(variationCollection).length, 2, 'resultaten en Event-tags binnen een meerregelige variant worden genegeerd');
+
+const crlfCollection = splitPgnCollection((gameOne + '\n\n' + gameTwo).replace(/\n/g, '\r\n'));
+equal(crlfCollection.length, 2, 'PGN-verzamelingen met CRLF-regelafbrekingen blijven gescheiden');
+
+const escapedCollection = '% generated by test\n[Event "Escaped"]\n\n1. e4 e5 *';
+equal(splitPgnCollection(escapedCollection).length, 1, 'PGN escape-regels worden genegeerd bij het bepalen van partijgrenzen');
 
 // 11. Exercise the exact backup validator used by the restore UI.
 const checkedBackup = validateBackup(backup);
@@ -442,5 +473,29 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+
+// 16. FEN-aware move-path identity must be stable across UI loading, PGN round-trips and move counters.
+const signatureStartFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const signatureWithCountersFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 7 15';
+const signatureNoCastlingFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b - - 0 1';
+const loadedFenGame = loadFenPosition(signatureStartFen);
+loadedFenGame.move('c5');
+check(loadedFenGame.pgn().includes('[SetUp "1"]') && loadedFenGame.pgn().includes('[FEN "' + signatureStartFen + '"]'), 'FEN laden bewaart de beginstelling in PGN-headers');
+equal(pathSignatureFromPgn(loadedFenGame.pgn()), movePathSignature(loadedFenGame), 'FEN-pad behoudt dezelfde identiteit na PGN-export en import');
+const counterVariant = loadFenPosition(signatureWithCountersFen);
+counterVariant.move('c5');
+equal(movePathSignature(counterVariant), movePathSignature(loadedFenGame), 'halfmove- en fullmove-tellers veroorzaken geen schijnbaar andere repertoiretak');
+const noCastlingVariant = loadFenPosition(signatureNoCastlingFen);
+noCastlingVariant.move('c5');
+check(movePathSignature(noCastlingVariant) !== movePathSignature(loadedFenGame), 'verschillende rokaderechten blijven verschillende beginstellingen');
+const standardRoute = new Chess();
+standardRoute.move('e4');
+standardRoute.move('c5');
+check(movePathSignature(standardRoute) !== movePathSignature(loadedFenGame), 'dezelfde laatste zet vanuit een andere beginstelling is geen duplicaat');
+const bareFenGame = new Chess(signatureStartFen);
+bareFenGame.move('c5');
+equal(movePathSignature(bareFenGame), movePathSignature(loadedFenGame), 'FEN-pad wordt ook herkend wanneer de Chess-instantie geen PGN-headers heeft');
+throws(() => pathSignatureFromPgn('1. e4 Qh9'), 'ongeldige PGN krijgt geen standaard-beginstelling als duplicaatsignatuur');
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
