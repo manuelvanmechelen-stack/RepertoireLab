@@ -9,7 +9,7 @@ import { rankCoverageMoves, summarizeCoverageMoves } from '../src/study/coverage
 import { calculateRepertoireMetrics, calculateRepertoireQuality } from '../src/study/analytics.mjs';
 import { buildRepertoireTree, getRepertoireContinuations } from '../src/study/repertoireTree.mjs';
 import { getDueMoveLineIds, getLineMoveMemoryEntries, rankTrainingLines } from '../src/study/trainingPriority.mjs';
-import { firstChangedPly, pruneLineMoveMemoryFromPly } from '../src/study/moveMemory.mjs';
+import { firstChangedPly, pruneLineMoveMemoryFromPly, removeLineMoveMemory } from '../src/study/moveMemory.mjs';
 import { identifyOpening, listOpeningCatalog } from '../src/study/openingCatalog.mjs';
 import { evaluationLossCp } from '../src/study/engineAudit.mjs';
 
@@ -82,6 +82,31 @@ const prunedEditMemory = pruneLineMoveMemoryFromPly(editMemory, 'edited', 4);
 check(Boolean(prunedEditMemory['edited:0']) && Boolean(prunedEditMemory['edited:3']), 'ongewijzigde eerdere zetten behouden hun FSRS-geheugen');
 check(!prunedEditMemory['edited:4'] && !prunedEditMemory['edited:6'], 'gewijzigde en latere zetten verliezen verouderd FSRS-geheugen');
 check(Boolean(prunedEditMemory['edited:child:0']) && Boolean(prunedEditMemory['other:0']), 'geheugen van child-varianten en andere lijnen blijft onaangetast');
+const memoryBeforeDelete = {
+  'line:0': { seen: 2 },
+  'line:4': { seen: 1 },
+  'line:child:0': { seen: 7 },
+  'line:childish:0': { seen: 3 },
+  'line:legacy': { seen: 99 },
+  'other:0': { seen: 5 },
+};
+const deletedParentMemory = removeLineMoveMemory(memoryBeforeDelete, 'line');
+check(!deletedParentMemory['line:0'] && !deletedParentMemory['line:4'], 'verwijderen wist alle canonieke zetkaarten van de exacte variant');
+check(Boolean(deletedParentMemory['line:child:0']) && Boolean(deletedParentMemory['line:childish:0']), 'verwijderen van een parent wist geen geheugen van varianten met een ID-prefix');
+check(Boolean(deletedParentMemory['line:legacy']) && Boolean(deletedParentMemory['other:0']), 'onbekende legacy-sleutels en geheugen van andere varianten blijven behouden');
+const deletedChildMemory = removeLineMoveMemory(memoryBeforeDelete, 'line:child');
+check(!deletedChildMemory['line:child:0'] && Boolean(deletedChildMemory['line:0']) && Boolean(deletedChildMemory['line:childish:0']), 'een lijn-ID met dubbele punten wordt exact verwijderd zonder prefixbotsing');
+const appDeleteLineStart = appSource.indexOf('function deleteLine(id: string) {');
+const appDeleteLineEnd = appSource.indexOf('function importPgn()', appDeleteLineStart);
+const appDeleteLineSource = appSource.slice(appDeleteLineStart, appDeleteLineEnd);
+check(appDeleteLineSource.includes('removeLineMoveMemory') && appDeleteLineSource.includes('setMissedMoves') && appDeleteLineSource.includes('setEngineLineAudits'),
+  'variant verwijderen ruimt zetgeheugen, foutentellers en engine-audits op');
+const appDeleteRepertoireStart = appSource.indexOf('function deleteActiveRepertoire() {');
+const appDeleteRepertoireEnd = appSource.indexOf('function exportActiveRepertoirePgn()', appDeleteRepertoireStart);
+const appDeleteRepertoireSource = appSource.slice(appDeleteRepertoireStart, appDeleteRepertoireEnd);
+check(appDeleteRepertoireSource.includes('removedLineIds') && appDeleteRepertoireSource.includes('removeLineMoveMemory')
+  && appDeleteRepertoireSource.includes('setMissedMoves') && appDeleteRepertoireSource.includes('setEngineLineAudits'),
+  'repertoire verwijderen ruimt de studiegegevens van alle bijbehorende varianten op');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const replaceLineStart = appSource.indexOf('function replaceCurrentLine() {');
 const replaceLineEnd = appSource.indexOf('function clickSquare(square: Square)', replaceLineStart);
