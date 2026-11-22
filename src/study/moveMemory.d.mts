@@ -4,3 +4,4 @@ export function pruneLineMoveMemoryFromPly<T>(
   lineId: string,
   firstPly: number,
 ): Record<string, T>;
+export function removeLineMoveMemory<T>(moveMemory: Record<string, T> | undefined, lineId: string): Record<string, T>;
