@@ -612,7 +612,7 @@ const customRootTranspositions = analyzeTranspositions([
   {
     id: 'custom-root-starts-here',
     name: 'Custom start na e4',
-    moves: `[SetUp "1"]\\n[FEN "${afterE4Fen}"]\\n\\n1... e5 *`,
+    moves: `[SetUp "1"]\n[FEN "${afterE4Fen}"]\n\n1... e5 *`,
   },
 ]);
 const customRootPosition = customRootTranspositions.find(item => item.fen === positionKey(new Chess(afterE4Fen)));
