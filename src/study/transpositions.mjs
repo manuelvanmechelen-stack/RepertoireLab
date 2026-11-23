@@ -27,6 +27,7 @@ export function analyzeTranspositions(lines = []) {
       const source = new Chess();
       source.loadPgn(String(line?.moves ?? ''));
       const moves = source.history({ verbose: true });
+      if (!moves.length) continue;
       const startFen = source.getHeaders().FEN;
       const cursor = startFen ? new Chess(startFen) : new Chess();
       const startKey = positionKey(cursor);

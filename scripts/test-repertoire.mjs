@@ -615,6 +615,14 @@ const customRootTranspositions = analyzeTranspositions([
     moves: `[SetUp "1"]\n[FEN "${afterE4Fen}"]\n\n1... e5 *`,
   },
 ]);
+const emptyRootTranspositions = analyzeTranspositions([
+  { id: 'standard-reaches-empty-root', name: 'Via standaard e4', moves: '1. e4' },
+  { id: 'empty-custom-root', name: 'Lege custom-FEN-lijn', moves: `[SetUp "1"]\n[FEN "${afterE4Fen}"]\n\n*` },
+]);
+check(
+  !emptyRootTranspositions.some(item => item.fen === positionKey(new Chess(afterE4Fen))),
+  'lege custom-FEN-lijn telt niet als tweede repertoirepad',
+);
 const customRootPosition = customRootTranspositions.find(item => item.fen === positionKey(new Chess(afterE4Fen)));
 check(customRootPosition, 'transpositie-analyse neemt een custom-FEN-startpositie op wanneer een andere variant die bereikt');
 equal(customRootPosition.paths, 2, 'custom-FEN-start en standaardroute tellen als twee verschillende zettenreeksen');
