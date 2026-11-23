@@ -607,6 +607,22 @@ check(sharedFenPosition, 'transpositie-analyse neemt de custom-FEN-voortzetting 
 equal(sharedFenPosition.paths, 2, 'standaard- en custom-FEN-route naar dezelfde stelling worden als twee paden herkend');
 check(sharedFenPosition.names.includes('Vanaf FEN na e4'), 'transpositie-analyse bewaart de naam van de custom-FEN-variant');
 
+const customRootTranspositions = analyzeTranspositions([
+  { id: 'standard-reaches-custom-root', name: 'Via standaard e4', moves: '1. e4' },
+  {
+    id: 'custom-root-starts-here',
+    name: 'Custom start na e4',
+    moves: `[SetUp "1"]\\n[FEN "${afterE4Fen}"]\\n\\n1... e5 *`,
+  },
+]);
+const customRootPosition = customRootTranspositions.find(item => item.fen === positionKey(new Chess(afterE4Fen)));
+check(customRootPosition, 'transpositie-analyse neemt een custom-FEN-startpositie op wanneer een andere variant die bereikt');
+equal(customRootPosition.paths, 2, 'custom-FEN-start en standaardroute tellen als twee verschillende zettenreeksen');
+check(
+  customRootPosition.names.includes('Via standaard e4') && customRootPosition.names.includes('Custom start na e4'),
+  'transpositie-overzicht bewaart beide varianten bij een custom-FEN-starttranspositie',
+);
+
 // 16. Different custom-FEN roots that converge after king moves remain distinct paths.
 const rightsRootFen = 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1';
 const noRightsRootFen = 'r3k2r/8/8/8/8/8/8/R3K2R w - - 0 1';

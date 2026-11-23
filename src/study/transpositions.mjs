@@ -10,6 +10,17 @@ const positionKey = game => game.fen().split(' ').slice(0, 4).join(' ');
  */
 export function analyzeTranspositions(lines = []) {
   const positions = new Map();
+  const recordPosition = (key, signature, name, ply) => {
+    const item = positions.get(key) ?? {
+      histories: new Set(),
+      names: new Set(),
+      ply,
+    };
+    item.histories.add(signature);
+    item.names.add(name);
+    item.ply = Math.min(item.ply, ply);
+    positions.set(key, item);
+  };
 
   for (const line of lines) {
     try {
@@ -20,20 +31,18 @@ export function analyzeTranspositions(lines = []) {
       const cursor = startFen ? new Chess(startFen) : new Chess();
       const startKey = positionKey(cursor);
       const path = [];
+      const lineName = line.name || 'Naamloze variant';
+
+      // A custom-FEN root is itself a repertoire position. Record it so the
+      // report can detect when another saved line reaches that position by
+      // playing a different move order, even before the custom line's first move.
+      recordPosition(startKey, `${startKey}|`, lineName, 0);
 
       for (const move of moves) {
         const played = cursor.move(move.san);
         path.push(played.san);
         const key = positionKey(cursor);
-        const item = positions.get(key) ?? {
-          histories: new Set(),
-          names: new Set(),
-          ply: path.length,
-        };
-        item.histories.add(`${startKey}|${path.join(' ')}`);
-        item.names.add(line.name || 'Naamloze variant');
-        item.ply = Math.min(item.ply, path.length);
-        positions.set(key, item);
+        recordPosition(key, `${startKey}|${path.join(' ')}`, lineName, path.length);
       }
     } catch {
       // Ignore malformed legacy PGNs, matching the app's previous behavior.
