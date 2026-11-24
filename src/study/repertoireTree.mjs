@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
+import { canonicalPositionKey } from './positionIdentity.mjs';
 
-const positionKey = game => game.fen().split(' ').slice(0, 4).join(' ');
+const positionKey = game => canonicalPositionKey(game);
 
 /**
  * Build a position-based repertoire graph. Identical positions reached by
@@ -95,6 +96,11 @@ export function buildRepertoireTree(lines = []) {
 /** Return only repertoire continuations legal from a supplied position. */
 export function getRepertoireContinuations(tree, fen) {
   if (!tree || !Array.isArray(tree.nodes)) return [];
-  const key = String(fen ?? '').split(' ').slice(0, 4).join(' ');
+  let key;
+  try {
+    key = canonicalPositionKey(String(fen ?? ''));
+  } catch {
+    return [];
+  }
   return tree.nodes.find(node => node.key === key)?.moves ?? [];
 }

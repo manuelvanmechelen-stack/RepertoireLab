@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { Chess, validateFen } from 'chess.js';
+import { canonicalPositionKey } from '../src/study/positionIdentity.mjs';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { loadTrainingLine, isOwnTrainingPly } from '../src/study/trainingBoard.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
@@ -659,6 +660,100 @@ equal(convergedSummary.paths, 2, 'transposition analysis distinguishes different
 
 
  
+// 16b. En-passant FEN metadata distinguishes positions only when a legal capture exists.
+const uncapturableEpFen = 'rnbqkbnr/ppp1pppp/8/3p4/8/8/PPPPPPPP/RNBQKBNR w KQkq d6 0 2';
+const uncapturableNoEpFen = 'rnbqkbnr/ppp1pppp/8/3p4/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2';
+equal(
+  canonicalPositionKey(uncapturableEpFen),
+  canonicalPositionKey(uncapturableNoEpFen),
+  'onbruikbaar en-passant-doelveld verandert de positie-identiteit niet',
+);
+
+const legalEpFen = '4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1';
+const legalEpNoRightFen = '4k3/8/8/3pP3/8/8/8/4K3 w - - 0 1';
+const legalEpGame = new Chess(legalEpFen);
+check(
+  legalEpGame.moves({ verbose: true }).some(move => move.flags.includes('e')),
+  'een werkelijk legale en-passantslag blijft beschikbaar',
+);
+check(
+  canonicalPositionKey(legalEpFen) !== canonicalPositionKey(legalEpNoRightFen),
+  'een legaal en-passantrecht blijft onderdeel van de positie-identiteit',
+);
+
+const pinnedEpFen = '4r1k1/8/8/3pP3/8/8/8/4K3 w - d6 0 1';
+const pinnedEpNoRightFen = '4r1k1/8/8/3pP3/8/8/8/4K3 w - - 0 1';
+const pinnedEpGame = new Chess(pinnedEpFen);
+check(
+  !pinnedEpGame.moves({ verbose: true }).some(move => move.flags.includes('e')),
+  'een en-passantslag die de koning blootstelt is niet legaal',
+);
+equal(
+  canonicalPositionKey(pinnedEpFen),
+  canonicalPositionKey(pinnedEpNoRightFen),
+  'een gepind pionnenpaar creëert geen vals en-passantonderscheid',
+);
+
+const uncapturableEpTree = buildRepertoireTree([
+  {
+    id: 'ep-marker-root',
+    name: 'Onbruikbare en-passantmarker',
+    moves: `[SetUp "1"]\n[FEN "${uncapturableEpFen}"]\n\n1. a3 *`,
+  },
+  {
+    id: 'no-ep-marker-root',
+    name: 'Zonder en-passantmarker',
+    moves: `[SetUp "1"]\n[FEN "${uncapturableNoEpFen}"]\n\n1. h3 *`,
+  },
+]);
+const uncapturableEpMoves = getRepertoireContinuations(uncapturableEpTree, uncapturableEpFen);
+check(
+  uncapturableEpMoves.some(move => move.san === 'a3') && uncapturableEpMoves.some(move => move.san === 'h3'),
+  'repertoireboom deelt een root wanneer het en-passantdoelveld niet tot een legale zet leidt',
+);
+
+const legalEpTree = buildRepertoireTree([
+  {
+    id: 'legal-ep-root',
+    name: 'Legale en-passantslag',
+    moves: `[SetUp "1"]\n[FEN "${legalEpFen}"]\n\n1. exd6 *`,
+  },
+  {
+    id: 'no-legal-ep-root',
+    name: 'Geen en-passantrecht',
+    moves: `[SetUp "1"]\n[FEN "${legalEpNoRightFen}"]\n\n1. e6 *`,
+  },
+]);
+const legalEpContinuations = getRepertoireContinuations(legalEpTree, legalEpFen);
+const noEpContinuations = getRepertoireContinuations(legalEpTree, legalEpNoRightFen);
+check(
+  legalEpContinuations.some(move => move.san === 'exd6') && !legalEpContinuations.some(move => move.san === 'e6'),
+  'repertoireboom behoudt de legale en-passantslag in de juiste root',
+);
+check(
+  noEpContinuations.some(move => move.san === 'e6') && !noEpContinuations.some(move => move.san === 'exd6'),
+  'repertoireboom voegt geen en-passantslag toe als het recht ontbreekt',
+);
+
+const epTranspositionLines = [
+  {
+    id: 'ep-transposition-a',
+    name: 'Route met onbruikbare en-passantmarker',
+    moves: `[SetUp "1"]\n[FEN "${uncapturableEpFen}"]\n\n1. a3 h6 2. h3 *`,
+  },
+  {
+    id: 'ep-transposition-b',
+    name: 'Route zonder en-passantmarker',
+    moves: `[SetUp "1"]\n[FEN "${uncapturableNoEpFen}"]\n\n1. h3 h6 2. a3 *`,
+  },
+];
+const epTranspositionEnd = new Chess(uncapturableNoEpFen);
+for (const san of ['a3', 'h6', 'h3']) play(epTranspositionEnd, san, 'en-passant-transpositie ' + san);
+const epTranspositionSummary = analyzeTranspositions(epTranspositionLines)
+  .find(item => item.fen === canonicalPositionKey(epTranspositionEnd));
+check(epTranspositionSummary, 'transpositieanalyse herkent convergerende routes met en zonder onbruikbare EP-marker');
+equal(epTranspositionSummary.paths, 2, 'transpositieanalyse telt beide zettenvolgordes bij dezelfde legale stelling');
+
 // 17. Game review must start both the played game and repertoire lines from their PGN FEN.
 const customFenReviewStart = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 12';
 const customFenReview = analyzeGameAgainstRepertoire(

@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
+import { canonicalPositionKey } from './positionIdentity.mjs';
 
-const positionKey = game => game.fen().split(' ').slice(0, 4).join(' ');
+const positionKey = game => canonicalPositionKey(game);
 
 /**
  * Find positions reached through more than one distinct move path.
