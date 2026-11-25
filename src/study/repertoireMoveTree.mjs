@@ -1,7 +1,8 @@
 import { Chess } from 'chess.js';
+import { canonicalPositionKey } from './positionIdentity.mjs';
 
 const STANDARD_FEN = new Chess().fen();
-const positionKey = fen => String(fen ?? '').trim().split(/\s+/).slice(0, 4).join(' ');
+const positionKey = fen => canonicalPositionKey(fen);
 
 function addUnique(items, value) {
   if (!items.includes(value)) items.push(value);
