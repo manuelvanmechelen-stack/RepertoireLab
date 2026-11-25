@@ -282,7 +282,7 @@ check(standardDisplayRoot?.moves.some(move => move.san === 'e4'), 'standaardbegi
  );
 
  const legalEpMoveTreeFen = '4k3/3p4/8/4P3/8/8/8/4K3 b - - 0 1';
- const legalEpMoveTreePgn = '[SetUp "1"]\\n[FEN "' + legalEpMoveTreeFen + '"]\\n\\n1... d5 *';
+ const legalEpMoveTreePgn = '[SetUp "1"]\n[FEN "' + legalEpMoveTreeFen + '"]\n\n1... d5 *';
  const legalEpMoveDisplay = buildRepertoireMoveTree([
    { id: 'ep-move-tree-legal', name: 'Legale en-passantslag in zetboom', moves: legalEpMoveTreePgn },
  ]);
