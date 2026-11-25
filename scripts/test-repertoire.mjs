@@ -259,6 +259,48 @@ equal(customNf3Node?.color, 'w', 'antwoord na custom-FEN-start wordt als witte z
 equal(customNf3Node?.moveNumber, 13, 'witte antwoordzet behoudt zetnummer 13');
 check(standardDisplayRoot?.moves.some(move => move.san === 'e4'), 'standaardbegin blijft een eigen zettenboomwortel');
 
+ // 5e. The move-order tree must use the same canonical position keys as the shared graph.
+ const uncapturableEpMoveTreeLine = {
+   id: 'ep-move-tree-uncapturable',
+   name: 'Onbruikbare en-passantmarker in zetboom',
+   moves: '1. e4 d5 *',
+ };
+ const uncapturableEpMoveGraph = buildRepertoireTree([uncapturableEpMoveTreeLine]);
+ const uncapturableEpMoveDisplay = buildRepertoireMoveTree([uncapturableEpMoveTreeLine]);
+ const uncapturableEpRoot = uncapturableEpMoveDisplay.roots.find(root => root.isStandard);
+ const uncapturableEpD5Node = uncapturableEpRoot?.moves.find(move => move.san === 'e4')?.children.find(move => move.san === 'd5');
+ const uncapturableEpD5Position = gameFromPgn('1. e4 d5 *');
+ check(uncapturableEpD5Node, 'zetboom bevat de stelling na 1. e4 d5');
+ equal(
+   uncapturableEpD5Node?.positionKey,
+   canonicalPositionKey(uncapturableEpD5Position),
+   'zetboom gebruikt dezelfde canonieke identiteit als de gedeelde stellingengraaf',
+ );
+ check(
+   uncapturableEpMoveGraph.nodes.some(node => node.key === uncapturableEpD5Node?.positionKey),
+   'zetboompositie na ...d5 kan via de canonieke sleutel in de gedeelde graaf worden teruggevonden',
+ );
+
+ const legalEpMoveTreeFen = '4k3/3p4/8/4P3/8/8/8/4K3 b - - 0 1';
+ const legalEpMoveTreePgn = '[SetUp "1"]\\n[FEN "' + legalEpMoveTreeFen + '"]\\n\\n1... d5 *';
+ const legalEpMoveDisplay = buildRepertoireMoveTree([
+   { id: 'ep-move-tree-legal', name: 'Legale en-passantslag in zetboom', moves: legalEpMoveTreePgn },
+ ]);
+ const legalEpMoveRoot = legalEpMoveDisplay.roots.find(root => !root.isStandard);
+ const legalEpD5Node = legalEpMoveRoot?.moves.find(move => move.san === 'd5');
+ const legalEpD5Position = new Chess(legalEpMoveTreeFen);
+ legalEpD5Position.move('d5');
+ equal(
+   legalEpD5Node?.positionKey,
+   canonicalPositionKey(legalEpD5Position),
+   'zetboom behoudt een en-passantrecht wanneer de capture legaal is',
+ );
+ check(
+   legalEpD5Node?.positionKey.endsWith(' d6'),
+   'legale en-passantdoelvelden blijven onderdeel van de positie-identiteit in de zetboom',
+ );
+
+
 // 6. PGN collection import semantics: multiple tagged games, metadata, and invalid-game handling.
 const collection = `[Event "Schots - hoofdvariant"]
 [Site "?"]
