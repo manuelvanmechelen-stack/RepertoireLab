@@ -416,6 +416,36 @@ throws(() => validateBackup({ ...backup, moveMemory: { broken: { seen: -1, misse
 throws(() => validateBackup({ lines: [{ ...backup.lines[0], color: 'Paars' }] }), 'onbekende kleur wordt afgewezen');
 const fallbackBackup = validateBackup({ ...backup, activeRepertoireId: 'missing-id' });
 equal(fallbackBackup.activeRepertoireId, 'rep-1', 'ongeldige actieve repertoirekeuze valt terug op bestaand repertoire');
+const orphanedLineBackup = { ...backup, lines: [{ ...backup.lines[0], repertoireId: 'missing-repertoire' }] };
+throws(() => validateBackup(orphanedLineBackup), 'back-up weigert een variant die naar een niet-bestaand repertoire verwijst');
+const inferredOwnershipBackup = validateBackup({
+  ...backup,
+  lines: [{ ...backup.lines[0], repertoireId: undefined }],
+});
+equal(inferredOwnershipBackup.lines[0].repertoireId, 'rep-1', 'ontbrekende repertoirekoppeling wordt alleen bij één kleurmatch veilig hersteld');
+const blankOwnershipBackup = validateBackup({
+  ...backup,
+  lines: [{ ...backup.lines[0], repertoireId: '   ' }],
+});
+equal(blankOwnershipBackup.lines[0].repertoireId, 'rep-1', 'lege repertoire-ID wordt als ontbrekende koppeling behandeld');
+throws(() => validateBackup({
+  ...backup,
+  repertoires: [backup.repertoires[0], { ...backup.repertoires[0], id: 'rep-2', name: 'Tweede wit repertoire' }],
+  lines: [{ ...backup.lines[0], repertoireId: undefined }],
+}), 'back-up weigert een ambigue ontbrekende repertoirekoppeling');
+throws(() => validateBackup({
+  ...backup,
+  repertoires: [{ ...backup.repertoires[0], color: 'Zwart' }],
+  lines: [{ ...backup.lines[0], repertoireId: undefined }],
+}), 'back-up weigert een variant zonder repertoire van dezelfde kleur');
+const legacyOwnershipBackup = validateBackup({
+  ...backup,
+  repertoires: [],
+  activeRepertoireId: '',
+  lines: [{ ...backup.lines[0], repertoireId: 'legacy-orphan' }],
+});
+equal(legacyOwnershipBackup.lines[0].repertoireId, undefined, 'legacy back-up zonder repertoirelijst laat de app veilige kleurmigratie uitvoeren');
+throws(() => validateBackup({ ...backup, repertoires: { invalid: true } }), 'ongeldige repertoirelijst wordt afgewezen');
 const emptyBackup = validateBackup({ lines: [], repertoires: [] });
 equal(emptyBackup.lines.length, 0, 'lege maar geldige back-up kan worden hersteld');
 equal(emptyBackup.activeRepertoireId, '', 'lege back-up heeft geen actief repertoire');
