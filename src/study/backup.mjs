@@ -17,7 +17,8 @@ export function validateBackup(raw) {
   const lines = raw.lines.map((item, index) => {
     if (!isRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
       typeof item.moves !== 'string' || !['Wit', 'Zwart'].includes(item.color) ||
-      !Array.isArray(item.tags) || !item.tags.every(tag => typeof tag === 'string') || typeof item.note !== 'string') {
+      !Array.isArray(item.tags) || !item.tags.every(tag => typeof tag === 'string') || typeof item.note !== 'string' ||
+      (item.repertoireId !== undefined && item.repertoireId !== null && typeof item.repertoireId !== 'string')) {
       throw new Error('Variant ' + (index + 1) + ' heeft ongeldige gegevens. Er is niets gewijzigd.');
     }
     if (lineIds.has(item.id)) throw new Error('Dubbel variant-ID gevonden: ' + item.id + '. Er is niets gewijzigd.');
@@ -28,14 +29,15 @@ export function validateBackup(raw) {
     }
     return {
       id: item.id, name: item.name, moves: item.moves, color: item.color, tags: item.tags,
-      note: item.note, repertoireId: typeof item.repertoireId === 'string' ? item.repertoireId : undefined,
+      note: item.note, repertoireId: typeof item.repertoireId === 'string' && item.repertoireId.trim() ? item.repertoireId.trim() : undefined,
       due: Number.isFinite(item.due) && item.due >= 0 ? item.due : 0,
       seen: Number.isFinite(item.seen) && item.seen >= 0 ? item.seen : 0,
       intervalDays: Number.isFinite(item.intervalDays) && item.intervalDays >= 0 ? item.intervalDays : undefined,
       fsrsCard: item.fsrsCard,
     };
   });
-  const rawReps = Array.isArray(raw.repertoires) ? raw.repertoires : [];
+  const rawReps = raw.repertoires === undefined ? [] : raw.repertoires;
+  if (!Array.isArray(rawReps)) throw new Error('De repertoirelijst in deze back-up is ongeldig. Er is niets gewijzigd.');
   const repIds = new Set();
   const repertoires = rawReps.map((item, index) => {
     if (!isRecord(item) || typeof item.id !== 'string' || !item.id.trim() || typeof item.name !== 'string' || !item.name.trim() ||
@@ -44,6 +46,29 @@ export function validateBackup(raw) {
     repIds.add(item.id);
     return { id: item.id, name: item.name, color: item.color, createdAt: Number.isFinite(item.createdAt) && item.createdAt >= 0 ? item.createdAt : Date.now() };
   });
+  // Keep restored lines reachable from the workspace. An orphaned repertoire ID
+  // otherwise leaves a valid PGN hidden because the UI filters by active repertoire.
+  for (const line of lines) {
+    if (repertoires.length === 0) {
+      // Legacy backups without repertoire records are migrated by the app on restore.
+      line.repertoireId = undefined;
+      continue;
+    }
+    if (line.repertoireId) {
+      if (!repIds.has(line.repertoireId)) {
+        throw new Error('Variant ' + line.name + ' verwijst naar een onbekend repertoire. Er is niets gewijzigd.');
+      }
+      continue;
+    }
+    const colorMatches = repertoires.filter(repertoire => repertoire.color === line.color);
+    if (colorMatches.length !== 1) {
+      const reason = colorMatches.length === 0
+        ? 'heeft geen bestaand repertoire van dezelfde kleur'
+        : 'kan niet eenduidig aan één repertoire worden gekoppeld';
+      throw new Error('Variant ' + line.name + ' ' + reason + '. Er is niets gewijzigd.');
+    }
+    line.repertoireId = colorMatches[0].id;
+  }
   const validCounterMap = value => isRecord(value) && Object.entries(value).every(([key, count]) => key.length > 0 && typeof count === 'number' && Number.isFinite(count) && count >= 0);
   const validMemoryMap = value => isRecord(value) && Object.entries(value).every(([key, entry]) =>
     key.length > 0 && isRecord(entry) && Number.isFinite(entry.seen) && entry.seen >= 0 &&
