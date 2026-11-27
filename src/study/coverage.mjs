@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { canonicalPositionKey } from './positionIdentity.mjs';
 
 /**
  * Rank master-database continuations for actionable repertoire coverage.
@@ -51,8 +52,12 @@ export function summarizeCoverageMoves(moves, knownSans = [], minGames = 20) {
 export function collectKnownContinuationSans(lines, targetFen) {
   if (!Array.isArray(lines) || typeof targetFen !== 'string' || !targetFen.trim()) return [];
 
-  const positionKey = fen => fen.trim().split(/\s+/).slice(0, 4).join(' ');
-  const targetKey = positionKey(targetFen);
+  let targetKey;
+  try {
+    targetKey = canonicalPositionKey(targetFen);
+  } catch {
+    return [];
+  }
   const known = new Set();
 
   for (const line of lines) {
@@ -64,7 +69,7 @@ export function collectKnownContinuationSans(lines, targetFen) {
       // Use it directly so custom-FEN starts and transposed paths share the
       // same position identity without replaying from the standard start.
       for (const move of game.history({ verbose: true })) {
-        if (positionKey(move.before) === targetKey) {
+        if (canonicalPositionKey(move.before) === targetKey) {
           known.add(move.san.replace(/[!?+#]+/g, ''));
         }
       }
