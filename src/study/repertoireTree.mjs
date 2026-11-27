@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
+import { canonicalPositionKey } from './positionIdentity.mjs';
 
-const positionKey = game => game.fen().split(' ').slice(0, 4).join(' ');
+const positionKey = game => canonicalPositionKey(game);
 
 /**
  * Build a position-based repertoire graph. Identical positions reached by
@@ -13,7 +14,7 @@ export function buildRepertoireTree(lines = []) {
   const rootKey = positionKey(start);
   nodes.set(rootKey, {
     key: rootKey, fen: start.fen(), ply: 0,
-    incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(['']),
+    incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set([`${rootKey}|`]),
   });
   let validLines = 0;
   let invalidLines = 0;
@@ -27,15 +28,21 @@ export function buildRepertoireTree(lines = []) {
       if (!history.length) { invalidLines++; continue; }
       validLines++;
       totalPlies += history.length;
-      const cursor = new Chess();
-      nodes.get(rootKey).lineIds.add(line.id);
+      // PGNs may begin from a composed or study position. Replay from the
+      // declared FEN instead of incorrectly applying those moves to the
+      // standard initial position.
+      const startFen = game.getHeaders().FEN;
+      const cursor = startFen ? new Chess(startFen) : new Chess();
+      const startKey = positionKey(cursor);
       for (const move of history) {
         const beforeKey = positionKey(cursor);
         const before = nodes.get(beforeKey) ?? {
           key: beforeKey, fen: cursor.fen(), ply: cursor.history().length,
           incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
-        before.pathSignatures.add(cursor.history().join(' '));
+        const beforePly = cursor.history().length;
+        if (beforePly < before.ply) before.ply = beforePly;
+        before.pathSignatures.add(`${startKey}|${cursor.history().join(' ')}`);
         nodes.set(beforeKey, before);
         const played = cursor.move(move);
         const afterKey = positionKey(cursor);
@@ -43,7 +50,9 @@ export function buildRepertoireTree(lines = []) {
           key: afterKey, fen: cursor.fen(), ply: cursor.history().length,
           incoming: [], moves: new Map(), lineIds: new Set(), pathSignatures: new Set(),
         };
-        after.pathSignatures.add(cursor.history().join(' '));
+        const afterPly = cursor.history().length;
+        if (afterPly < after.ply) after.ply = afterPly;
+        after.pathSignatures.add(`${startKey}|${cursor.history().join(' ')}`);
         nodes.set(afterKey, after);
         const existing = before.moves.get(played.san) ?? {
           san: played.san, uci: played.from + played.to + (played.promotion ?? ''),
@@ -87,6 +96,11 @@ export function buildRepertoireTree(lines = []) {
 /** Return only repertoire continuations legal from a supplied position. */
 export function getRepertoireContinuations(tree, fen) {
   if (!tree || !Array.isArray(tree.nodes)) return [];
-  const key = String(fen ?? '').split(' ').slice(0, 4).join(' ');
+  let key;
+  try {
+    key = canonicalPositionKey(String(fen ?? ''));
+  } catch {
+    return [];
+  }
   return tree.nodes.find(node => node.key === key)?.moves ?? [];
 }
