@@ -110,6 +110,39 @@ const transposedKnownReplies = collectKnownContinuationSans([
 ], standardCoveragePosition.fen());
 check(transposedKnownReplies.includes('Nf3'), 'coverage behoudt vervolgzetten uit standaard PGN-routes');
 
+const uncapturableEpCoverageLine = {
+  id: 'coverage-uncapturable-ep',
+  moves: '1. e4 d5 2. exd5',
+};
+const uncapturableEpCoverageFen = 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2';
+check(
+  collectKnownContinuationSans([uncapturableEpCoverageLine], uncapturableEpCoverageFen).includes('exd5'),
+  'coverage herkent vervolgen wanneer een aangeleverd FEN een onbruikbaar en-passantdoelveld bevat',
+);
+
+const legalEpCoveragePosition = gameFromPgn('1. e4 a6 2. e5 d5');
+const legalEpCoverageFen = legalEpCoveragePosition.fen({ forceEnpassantSquare: true });
+const legalEpCoverageLine = {
+  id: 'coverage-legal-ep',
+  moves: '1. e4 a6 2. e5 d5 3. exd6',
+};
+check(
+  collectKnownContinuationSans([legalEpCoverageLine], legalEpCoverageFen).includes('exd6'),
+  'coverage behoudt een werkelijk legale en-passantslag als vervolg',
+);
+const legalEpWithoutRight = legalEpCoverageFen.split(/\\s+/);
+legalEpWithoutRight[3] = '-';
+equal(
+  collectKnownContinuationSans([legalEpCoverageLine], legalEpWithoutRight.join(' ')).length,
+  0,
+  'coverage verwart een positie zonder legaal en-passantrecht niet met een positie waar exd6 legaal is',
+);
+equal(
+  collectKnownContinuationSans([uncapturableEpCoverageLine], 'ongeldige FEN').length,
+  0,
+  'ongeldige doelstelling geeft geen fout of valse repertoiredekking',
+);
+
 
 // 1. Canonical repertoire examples: PGN parsing, turn, legal replay and FEN consistency.
 const examples = [
