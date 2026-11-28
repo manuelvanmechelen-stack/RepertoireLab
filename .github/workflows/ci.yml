@@ -8,6 +8,9 @@ on:
       - "feature/**"
       - "fix/**"
       - "chore/**"
+      - "perf/**"
+      - "ux/**"
+      - "test/**"
 
 permissions:
   contents: read
@@ -18,20 +21,27 @@ concurrency:
 
 jobs:
   verify:
-    name: Tests, TypeScript and production build
+    name: Tests, TypeScript, security and production build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
+
+      - name: Verify supported Node.js runtime
+        run: |
+          node -e "const major = Number(process.versions.node.split('.')[0]); if (major !== 24) { console.error('Expected Node.js 24, received ' + process.version); process.exit(1); }"
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Audit installed dependency tree
+        run: npm audit --audit-level=moderate
 
       - name: Run repertoire regression tests
         run: npm test
