@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Chess, validateFen } from 'chess.js';
 import { scheduleMoveResult, scheduleLineResult, scheduleLineGrade, scheduleFsrsMoveResult, scheduleFsrsLineGrade, isDue, selectDueOwnPly } from '../src/study/scheduling.mjs';
 import { splitPgnCollection } from '../src/study/pgn.mjs';
@@ -442,5 +443,17 @@ equal(transpositionReview.firstDeviation, null, 'review herkent een transpositie
 equal(transpositionReview.transpositionCount, 3, 'review registreert de halve zetten tot de transpositie');
 check(transpositionReview.summary.includes('transpositie herkend'), 'review benoemt de transpositie in het verslag');
 throws(() => analyzeGameAgainstRepertoire('geen geldige PGN', savedLines), 'review weigert een partij zonder geldige zetten');
+
+// 13. Keep the independent CI workflow on a supported, auditable runtime.
+const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+check(ciWorkflow.includes('actions/checkout@v5'), 'CI gebruikt checkout v5 met de Node 24 runtime');
+check(ciWorkflow.includes('actions/setup-node@v5'), 'CI gebruikt setup-node v5 met de Node 24 runtime');
+check(/node-version:\\s*24\\b/.test(ciWorkflow), 'CI pinnt de Node.js 24 runtime');
+check(ciWorkflow.includes('npm audit --audit-level=moderate'), 'CI voert een dependency-audit uit');
+check(/permissions:\\s*\\n\\s+contents:\\s+read/.test(ciWorkflow), 'CI behoudt alleen-lezen repositoryrechten');
+check(ciWorkflow.includes('cancel-in-progress: true'), 'CI annuleert verouderde runs op dezelfde ref');
+for (const prefix of ['feature', 'fix', 'chore', 'perf', 'ux', 'test']) {
+  check(ciWorkflow.includes('- "' + prefix + '/**"'), 'CI triggert pushes op de ' + prefix + ' branch-prefix');
+}
 
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
