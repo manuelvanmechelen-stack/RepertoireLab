@@ -456,4 +456,16 @@ for (const prefix of ['feature', 'fix', 'chore', 'perf', 'ux', 'test']) {
   check(ciWorkflow.includes('- "' + prefix + '/**"'), 'CI triggert pushes op de ' + prefix + ' branch-prefix');
 }
 
+const securityWorkflow = readFileSync(new URL('../.github/workflows/security.yml', import.meta.url), 'utf8');
+check(securityWorkflow.includes('actions/checkout@v5'), 'securityworkflow gebruikt checkout v5');
+check(securityWorkflow.includes('actions/setup-node@v5'), 'securityworkflow gebruikt setup-node v5');
+check(/node-version:\s*24\b/.test(securityWorkflow), 'securityworkflow gebruikt Node.js 24');
+check(securityWorkflow.includes('npm audit --audit-level=moderate'), 'securityworkflow voert dependency-audit uit');
+
+const browserWorkflow = readFileSync(new URL('../.github/workflows/e2e.yml', import.meta.url), 'utf8');
+check(browserWorkflow.includes('actions/checkout@v5'), 'browserworkflow gebruikt checkout v5');
+check(browserWorkflow.includes('actions/setup-node@v5'), 'browserworkflow gebruikt setup-node v5');
+check(/node-version:\s*24\b/.test(browserWorkflow), 'browserworkflow gebruikt Node.js 24');
+check(browserWorkflow.includes('npx playwright test'), 'browserworkflow voert Playwright-regressies uit');
+
 console.log('RepertoireLab uitgebreide regressietests geslaagd: ' + checks + ' controles, ' + examples.length + ' repertoirevoorbeelden.');
